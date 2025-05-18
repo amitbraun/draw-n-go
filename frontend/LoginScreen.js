@@ -13,33 +13,32 @@ import styles from './styles';
 import logo from '../assets/logo.png';
 
 const LoginScreen = ({ navigation }) => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
   const handleLogin = async () => {
-    if (email.length < 3 || password.length < 4) {
-        Alert.alert('Invalid Input', 'Email must be at least 3 chars, password at least 4.');
+    if (username.length < 3 || password.length < 4) {
+        Alert.alert('Invalid Input', 'Username must be at least 3 chars, password at least 4.');
         return;
     }
 
     try {
-        const response = { ok: true, json: async () => ({ success: true }) };
+    const response = await fetch('https://draw-and-go.azurewebsites.net/api/login?', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password }),
+    });
 
-        if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-        }
-
-        const result = await response.json();
-        if (result.success) {
-        navigation.navigate('Main');
-        } else {
-        Alert.alert('Login Failed', result.message || 'Invalid credentials');
-        }
-    } catch (error) {
-        Alert.alert('Error', error.message);
+    const text = await response.text();
+    if (response.status === 200) {
+      navigation.navigate('Main');
+    } else {
+      Alert.alert('Login Failed', text);
     }
-    };
+  } catch (err) {
+    Alert.alert('Error', 'Could not connect to server');
+  }
+};
 
 
   return (
@@ -55,12 +54,11 @@ const LoginScreen = ({ navigation }) => {
 
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder="Username"
             placeholderTextColor="#aaa"
-            keyboardType="email-address"
             autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
+            value={username}
+            onChangeText={setUsername}
           />
 
           <TextInput

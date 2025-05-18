@@ -1,14 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as Location from 'expo-location';
+import * as SignalR from '@microsoft/signalr';
+import { v4 as uuidv4 } from 'uuid';
 import EntranceScreen from './frontend/EntranceScreen';
 import MainScreen from './frontend/MainScreen';
 import LoginScreen from './frontend/LoginScreen.js';
 import SignupScreen from './frontend/SignupScreen';
 
 const Stack = createNativeStackNavigator();
+const SIGNALR_ENDPOINT = 'https://draw-and-go.azurewebsites.net';
+let clientId = uuidv4();
 
 export default function App() {
+  const [authState, setAuthState] = useState(null); // "login", "signup", "authenticated"
+  const [authMode, setAuthMode] = useState('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState(null); // "brush" or "painter"
+  const [connection, setConnection] = useState(null);
+  const [brushLocation, setBrushLocation] = useState(null);
+  const [brushTrail, setBrushTrail] = useState([]);
+  const [allBrushes, setAllBrushes] = useState({});
+  
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Entrance">

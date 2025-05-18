@@ -14,14 +14,28 @@ const SignupScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (username.length < 3 || password.length < 4) {
       Alert.alert('Weak Input', 'Username must be at least 3 characters and password at least 4.');
       return;
     }
+    try {
+    const response = await fetch('https://draw-and-go.azurewebsites.net/api/signUp?', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
 
-    Alert.alert('Success', `Account created for ${username}`);
-    navigation.navigate('Login');
+    const text = await response.text();
+    if (response.status === 201) {
+      Alert.alert('Success', `Account created for ${username}`);
+      navigation.navigate('Login');
+    } else {
+      Alert.alert('Signup Failed', text);
+    }
+    } catch (err) {
+    Alert.alert('Error', 'Could not connect to server');
+    }
   };
 
   return (
