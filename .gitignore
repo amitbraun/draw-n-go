@@ -33,4 +33,7 @@ yarn-error.*
 .env*.local
 
 # typescript
-*.tsbuildinfo
+*.tsbuildinf
+
+# Expo settings for API keys
+expo.settings.json

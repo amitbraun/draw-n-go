@@ -1,0 +1,8 @@
+{
+    "IsEncrypted": false,
+    "Values": {
+    "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=projectex1a744;AccountKey=HJq7pXf846S2uEEjwrTTTBOjsKwBduA+VntYG1lITZtVGdmn/vmjbSTLW4AglZwIi2kgnjvvUr7a+AStqc/qlQ==;EndpointSuffix=core.windows.net",
+    "AzureSignalRConnectionString": "Endpoint=https://signalr-skeleton-rsrc.service.signalr.net;AccessKey=G5fxNlldnmRi5RqF3z86tIlaiPGirCV9SvyyrIiG95nX9OhMRpQRJQQJ99BDACYeBjFXJ3w3AAAAASRShIam;Version=1.0;",
+    "FUNCTIONS_WORKER_RUNTIME": "Python"
+    }
+}
