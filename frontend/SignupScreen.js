@@ -3,7 +3,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   SafeAreaView,
   ScrollView,
   View
@@ -13,28 +12,34 @@ import styles from './styles';
 const SignupScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleSignup = async () => {
+    setErrorMessage('');
+    setSuccessMessage('');
+
     if (username.length < 3 || password.length < 4) {
-      Alert.alert('Weak Input', 'Username must be at least 3 characters and password at least 4.');
+      setErrorMessage('Username must be at least 3 characters and password at least 4.');
       return;
     }
-    try {
-    const response = await fetch('https://draw-and-go.azurewebsites.net/api/signUp?', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
 
-    const text = await response.text();
-    if (response.status === 201) {
-      Alert.alert('Success', `Account created for ${username}`);
-      navigation.navigate('Login');
-    } else {
-      Alert.alert('Signup Failed', text);
-    }
+    try {
+      const response = await fetch('https://draw-and-go.azurewebsites.net/api/signUp?', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const text = await response.text();
+      if (response.status === 201) {
+        setSuccessMessage(`Account created for ${username}`);
+        navigation.navigate('Login');
+      } else {
+        setErrorMessage(text);
+      }
     } catch (err) {
-    Alert.alert('Error', 'Could not connect to server');
+      setErrorMessage('Could not connect to server.');
     }
   };
 
@@ -69,6 +74,9 @@ const SignupScreen = ({ navigation }) => {
           <TouchableOpacity style={styles.button} onPress={handleSignup}>
             <Text style={styles.buttonText}>Register</Text>
           </TouchableOpacity>
+
+          {errorMessage !== '' && <Text style={styles.error}>{errorMessage}</Text>}
+          {successMessage !== '' && <Text style={styles.success}>{successMessage}</Text>}
 
           <TouchableOpacity onPress={() => navigation.navigate('Login')}>
             <Text style={styles.linkText}>Already have an account? Log In</Text>

@@ -4,7 +4,6 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
-  Alert,
   SafeAreaView,
   ScrollView,
   View
@@ -15,31 +14,36 @@ import logo from '../assets/logo.png';
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleLogin = async () => {
+    setErrorMessage('');
+    setSuccessMessage('');
+
     if (username.length < 3 || password.length < 4) {
-        Alert.alert('Invalid Input', 'Username must be at least 3 chars, password at least 4.');
-        return;
+      setErrorMessage('Username must be at least 3 characters and password at least 4.');
+      return;
     }
 
     try {
-    const response = await fetch('https://draw-and-go.azurewebsites.net/api/login?', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username, password }),
-    });
+      const response = await fetch('https://draw-and-go.azurewebsites.net/api/login?', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
 
-    const text = await response.text();
-    if (response.status === 200) {
-      navigation.navigate('Main');
-    } else {
-      Alert.alert('Login Failed', text);
+      const text = await response.text();
+      if (response.status === 200) {
+        setSuccessMessage('Login successful!');
+        navigation.navigate('Main');
+      } else {
+        setErrorMessage(text);
+      }
+    } catch (err) {
+      setErrorMessage('Could not connect to server.');
     }
-  } catch (err) {
-    Alert.alert('Error', 'Could not connect to server');
-  }
-};
-
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -73,6 +77,9 @@ const LoginScreen = ({ navigation }) => {
           <TouchableOpacity style={styles.button} onPress={handleLogin}>
             <Text style={styles.buttonText}>Log In</Text>
           </TouchableOpacity>
+
+          {errorMessage !== '' && <Text style={styles.error}>{errorMessage}</Text>}
+          {successMessage !== '' && <Text style={styles.success}>{successMessage}</Text>}
 
           <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
             <Text style={styles.linkText}>Don’t have an account? Sign Up</Text>

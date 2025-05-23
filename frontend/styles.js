@@ -204,6 +204,20 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
+  error: {
+    color: 'red',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 20,
+  },
+  success: {
+    color: 'green',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 20,
+  },
 });
 
 export default styles;
