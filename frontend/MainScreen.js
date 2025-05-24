@@ -3,36 +3,113 @@ import {
   Text,
   View,
   SafeAreaView,
-  TouchableOpacity
+  TouchableOpacity,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import styles from './styles';
 
-const MainScreen = () => {
+const MainScreen = ({ navigation, route }) => {
+  const username = route.params?.username;
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [selectedAction, setSelectedAction] = useState('Create');
   const [notification, setNotification] = useState('');
+  const [joinKey, setJoinKey] = useState('');
 
   const handleOption = (option) => {
     setSelectedAction(option);
     setDropdownVisible(false);
+    setNotification('');
   };
 
-  const handlePrimaryAction = () => {
-    setNotification(`${selectedAction} triggered`);
-    setTimeout(() => setNotification(''), 3000);
+  const showNotification = (text, duration = 3000) => {
+    setNotification(text);
+    setTimeout(() => setNotification(''), duration);
+  };
+
+  const handlePrimaryAction = async () => {
+    if (!username) {
+      showNotification('Please enter your username.');
+      return;
+    }
+
+    if (selectedAction === 'Create') {
+      try {
+        const response = await fetch('https://draw-and-go.azurewebsites.net/api/CreateSession', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-username': username,
+          },
+        });
+
+        const data = await response.json();
+        if (response.status === 201) {
+          navigation.navigate('WaitingRoom', {
+            sessionId: data.sessionId,
+            username,
+            isAdmin: true,
+          });
+        } else {
+          showNotification(data.message || 'Failed to create session.');
+        }
+      } catch (err) {
+        showNotification('Server error creating session.');
+      }
+    } else if (selectedAction === 'Join') {
+      if (!joinKey) {
+        showNotification('Enter a session ID or creator username.');
+        return;
+      }
+
+      const body = joinKey.includes('-')
+        ? { sessionId: joinKey }
+        : { creator: joinKey };
+
+      try {
+        const response = await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-username': username,
+          },
+          body: JSON.stringify(body),
+        });
+
+        const data = await response.json();
+        if (response.status === 200) {
+          navigation.navigate('WaitingRoom', {
+            sessionId: data.sessionId,
+            username,
+            isAdmin: false,
+          });
+        } else {
+          showNotification(data.message || 'Failed to join session.');
+        }
+      } catch (err) {
+        showNotification('Server error joining session.');
+      }
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Main Screen</Text>
-        <Text style={styles.placeholderText}>
-          Your location-based features will appear here.
-        </Text>
+        <Text style={styles.placeholderText}>Your location-based features will appear here.</Text>
       </View>
 
       <View style={styles.actionContainer}>
+          {selectedAction === 'Join' && (
+          <TextInput
+            style={styles.input}
+            placeholder="Session ID or Creator"
+            value={joinKey}
+            onChangeText={setJoinKey}
+            autoCapitalize="none"
+          />
+        )}
+
         <View style={styles.splitButtonRow}>
           <TouchableOpacity style={styles.splitButtonLeft} onPress={handlePrimaryAction}>
             <Text style={styles.buttonText}>{selectedAction}</Text>

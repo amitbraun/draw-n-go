@@ -36,7 +36,7 @@ const LoginScreen = ({ navigation }) => {
       const text = await response.text();
       if (response.status === 200) {
         setSuccessMessage('Login successful!');
-        navigation.navigate('Main');
+        navigation.navigate('Main', { username });
       } else {
         setErrorMessage(text);
       }

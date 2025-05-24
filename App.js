@@ -8,6 +8,7 @@ import EntranceScreen from './frontend/EntranceScreen';
 import MainScreen from './frontend/MainScreen';
 import LoginScreen from './frontend/LoginScreen.js';
 import SignupScreen from './frontend/SignupScreen';
+import WaitingRoom from './frontend/WaitingRoom';
 
 const Stack = createNativeStackNavigator();
 const SIGNALR_ENDPOINT = 'https://draw-and-go.azurewebsites.net';
@@ -29,16 +30,18 @@ export default function App() {
       <Stack.Navigator initialRouteName="Entrance">
         <Stack.Screen
           name="Entrance"
-          component={EntranceScreen} // ✅ Renders WITH navigation
+          component={EntranceScreen}
           options={{ headerShown: false }}
         />
-        <Stack.Screen
-          name="Main"
-          component={MainScreen}
-          options={{ title: 'Main Screen',
-            headerShown: false }}
-
-        />
+        <Stack.Screen name="Main" options={{ headerShown: false }}>
+          {props => (
+            <MainScreen
+              {...props}
+              username={username}
+              setUsername={setUsername}
+            />
+          )}
+        </Stack.Screen>
         <Stack.Screen 
           name="Login" 
           component={LoginScreen} 
@@ -47,7 +50,11 @@ export default function App() {
         name="Signup" 
         component={SignupScreen} 
         />
-
+        <Stack.Screen
+        name="WaitingRoom"
+        component={WaitingRoom}
+        options={{ headerShown: false }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
