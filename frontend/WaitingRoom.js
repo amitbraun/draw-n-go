@@ -63,7 +63,7 @@ const WaitingRoom = ({ route, navigation }) => {
 
   const handleReady = async () => {
     try {
-      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession?', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -82,7 +82,7 @@ const WaitingRoom = ({ route, navigation }) => {
 
   const handleLeave = async () => {
     try {
-      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession?', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

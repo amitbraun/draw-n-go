@@ -98,7 +98,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 else:
                     session["users"] = json.dumps(users)
                     session["readyStatus"] = json.dumps(ready_status)
-                    session_table.update_entity(session, mode="Merge")
+                    session_table.update_entity(session, mode="merge")
                     return func.HttpResponse(
                         json.dumps({ "message": "Left session", "sessionId": session_id }),
                         status_code=200,
@@ -116,7 +116,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
             session["users"] = json.dumps(users)
             session["readyStatus"] = json.dumps(ready_status)
-            session_table.update_entity(session, mode="Merge")
+            session_table.update_entity(session, mode="merge")
 
             return func.HttpResponse(
                 json.dumps({ "message": "Success", "sessionId": session_id }),
