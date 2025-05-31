@@ -11,7 +11,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     }
 
     if req.method == "OPTIONS":
-        return func.HttpResponse("", status_code=200, headers=cors_headers)
+        return func.HttpResponse("", status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
 
     try:
         connection_string = os.getenv("AzureWebJobsStorage")
@@ -19,27 +19,33 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
         # === GET: Return session info ===
         if req.method == "GET":
-            session_id = req.params.get("sessionId")
+            # --- PATCH: Try both params and route_params for sessionId ---
+            session_id = req.params.get("sessionId") or (req.route_params.get("sessionId") if hasattr(req, "route_params") else None)
             if not session_id:
-                return func.HttpResponse("Missing sessionId", status_code=400, headers=cors_headers)
+                return func.HttpResponse(json.dumps({"error": "Missing sessionId"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
+
+            # Debug log: print partition key and row key
+            print(f"DEBUG: Looking up session with PartitionKey='session', RowKey='{session_id}'")
 
             try:
                 session = session_table.get_entity(partition_key="session", row_key=session_id)
-            except:
-                return func.HttpResponse("Session not found", status_code=404, headers=cors_headers)
+            except Exception as e:
+                # Add error logging for debugging
+                print(f"DEBUG: get_entity failed for PartitionKey='session', RowKey='{session_id}': {str(e)}")
+                return func.HttpResponse(json.dumps({"error": f"Session not found: {str(e)}"}), status_code=404, headers={**cors_headers, "Content-Type": "application/json"})
 
             try:
                 users = json.loads(session.get("users", "[]") or "[]")
             except Exception as e:
-                return func.HttpResponse("Corrupt users field", status_code=500, headers=cors_headers)
+                return func.HttpResponse(json.dumps({"error": "Corrupt users field"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
             try:
                 ready_status = json.loads(session.get("readyStatus", "{}") or "{}")
             except Exception as e:
-                return func.HttpResponse("Corrupt readyStatus field", status_code=500, headers=cors_headers)
+                return func.HttpResponse(json.dumps({"error": "Corrupt readyStatus field"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
             return func.HttpResponse(
-                json.dumps({ "users": users, "readyStatus": ready_status }),
+                json.dumps({ "users": users, "readyStatus": ready_status, "creator": session.get("creator", "") }),
                 status_code=200,
                 headers={**cors_headers, "Content-Type": "application/json"}
             )
@@ -48,7 +54,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         elif req.method == "POST":
             username = req.headers.get("x-username")
             if not username:
-                return func.HttpResponse("Missing x-username header", status_code=400, headers=cors_headers)
+                return func.HttpResponse(json.dumps({"error": "Missing x-username header"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
 
             data = req.get_json()
             session_id = data.get("sessionId")
@@ -62,20 +68,20 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 try:
                     session = session_table.get_entity(partition_key="session", row_key=session_id)
                 except:
-                    return func.HttpResponse("Session not found", status_code=404, headers=cors_headers)
+                    return func.HttpResponse(json.dumps({"error": "Session not found"}), status_code=404, headers={**cors_headers, "Content-Type": "application/json"})
             elif creator_username:
                 sessions = list(session_table.query_entities(
                     f"PartitionKey eq 'session' and creator eq '{creator_username}'"
                 ))
                 if not sessions:
-                    return func.HttpResponse("No session found for that creator", status_code=404, headers=cors_headers)
+                    return func.HttpResponse(json.dumps({"error": "No session found for that creator"}), status_code=404, headers={**cors_headers, "Content-Type": "application/json"})
                 session = sessions[0]
                 session_id = session["RowKey"]
             else:
-                return func.HttpResponse("Missing sessionId or creator", status_code=400, headers=cors_headers)
+                return func.HttpResponse(json.dumps({"error": "Missing sessionId or creator"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
 
             if session.get("isStarted", False):
-                return func.HttpResponse("Session already started", status_code=403, headers=cors_headers)
+                return func.HttpResponse(json.dumps({"error": "Session already started"}), status_code=403, headers={**cors_headers, "Content-Type": "application/json"})
 
             users = json.loads(session.get("users", "[]"))
             ready_status = json.loads(session.get("readyStatus", "{}"))
@@ -83,7 +89,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             # === Handle leave request ===
             if leave:
                 if username not in users:
-                    return func.HttpResponse("User not in session", status_code=400, headers=cors_headers)
+                    return func.HttpResponse(json.dumps({"error": "User not in session"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
 
                 users.remove(username)
                 ready_status.pop(username, None)
@@ -111,8 +117,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 ready_status[username] = False
 
             # === Handle ready ===
-            if set_ready:
-                ready_status[username] = True
+            if "setReady" in data:
+                ready_status[username] = bool(data["setReady"])
 
             session["users"] = json.dumps(users)
             session["readyStatus"] = json.dumps(ready_status)
@@ -125,7 +131,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             )
 
         else:
-            return func.HttpResponse("Method not allowed", status_code=405, headers=cors_headers)
+            return func.HttpResponse(json.dumps({"error": "Method not allowed"}), status_code=405, headers={**cors_headers, "Content-Type": "application/json"})
 
     except Exception as e:
-        return func.HttpResponse(f"Error: {str(e)}", status_code=500, headers=cors_headers)
+        return func.HttpResponse(f"Error: {str(e)}", status_code=500, headers={**cors_headers, "Content-Type": "application/json"})

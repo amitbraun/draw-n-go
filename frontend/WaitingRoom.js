@@ -8,6 +8,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 
 const WaitingRoom = ({ route, navigation }) => {
@@ -16,19 +17,40 @@ const WaitingRoom = ({ route, navigation }) => {
   const [users, setUsers] = useState([]);
   const [readyStatus, setReadyStatus] = useState({});
   const [loading, setLoading] = useState(true);
-  const [hasPressedReady, setHasPressedReady] = useState(false);
+  const [creator, setCreator] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [startError, setStartError] = useState(""); // <-- add this line
 
   const fetchSession = async () => {
     try {
       const response = await fetch(
         `https://draw-and-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
       );
+      if (!response.ok) {
+        // Try to read error message from response
+        let errorMsg = 'Unknown error';
+        try {
+          const errData = await response.json();
+          errorMsg = errData.error || JSON.stringify(errData);
+        } catch (e) {
+          errorMsg = response.statusText;
+        }
+        console.error('Failed to fetch session:', errorMsg);
+
+        setErrorMsg(errorMsg); // <-- set error message
+        setLoading(false);
+        return;
+      }
       const data = await response.json();
       setUsers(data.users || []);
       setReadyStatus(data.readyStatus || {});
+      setCreator(data.creator || "");
+      setErrorMsg(""); // <-- clear error if successful
       setLoading(false);
     } catch (err) {
       console.error('Failed to fetch session:', err);
+      setErrorMsg("Network error or server unavailable.");
+      setLoading(false);
     }
   };
 
@@ -61,28 +83,55 @@ const WaitingRoom = ({ route, navigation }) => {
     }, [navigation, sessionId, username])
   );
 
-  const handleReady = async () => {
+  // SignalR connection for game start event
+  useEffect(() => {
+    const connection = new SignalR.HubConnectionBuilder()
+      .withUrl('https://draw-and-go.azurewebsites.net/api')
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on('gameStarted', (data) => {
+      if (data.sessionId === sessionId) {
+        navigation.navigate('Game', {
+          sessionId: data.sessionId,
+          gameId: data.gameId,
+          users: data.users,
+          painter: data.painter,
+          roles: data.roles,
+          username,
+        });
+      }
+    });
+
+    connection.start();
+    return () => {
+      connection.stop();
+    };
+  }, [sessionId, username, navigation]);
+
+  const handleToggleReady = async () => {
     try {
-      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession?', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-username': username
-        },
-        body: JSON.stringify({
-          sessionId,
-          setReady: true
-        }),
-      });
-      setHasPressedReady(true);
+        const isReady = readyStatus[username];
+        await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-username': username
+            },
+            body: JSON.stringify({
+                sessionId,
+                setReady: !isReady
+            }),
+        });
+       fetchSession();
     } catch (err) {
-      console.error('Failed to mark ready:', err);
+        console.error('Failed to toggle ready:', err);
     }
   };
 
   const handleLeave = async () => {
     try {
-      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession?', {
+      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -102,8 +151,22 @@ const WaitingRoom = ({ route, navigation }) => {
 
   const allReady = users.length > 0 && users.every(user => readyStatus[user]);
 
-  const handleStartGame = () => {
-    navigation.navigate('Game', { sessionId, username });
+  const handleStartGame = async () => {
+    if (!allReady) {
+      setStartError("All players must be ready to start the game.");
+      return;
+    }
+    setStartError(""); // clear any previous error
+
+    try {
+      await fetch('https://draw-and-go.azurewebsites.net/api/StartGame', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+    } catch (err) {
+      setStartError("Failed to start game.");
+    }
   };
 
   return (
@@ -115,34 +178,59 @@ const WaitingRoom = ({ route, navigation }) => {
 
       {loading ? (
         <ActivityIndicator size="large" color="#21a4d6" />
+      ) : errorMsg ? (
+        <View style={{ padding: 16 }}>
+          <Text style={{ color: 'red', textAlign: 'center' }}>{errorMsg}</Text>
+        </View>
       ) : (
         <FlatList
           data={users}
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
-            <Text
-              style={{
-                ...styles.dropdownItem,
-                fontWeight: item === username ? 'bold' : 'normal',
-                color: readyStatus[item] ? 'green' : '#21a4d6'
-              }}
-            >
-              {item} {item === username && ' (you)'} {readyStatus[item] ? '✅' : ''}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
+                <Text
+                    style={{
+                    ...styles.dropdownItem,
+                    fontWeight: item === username ? 'bold' : 'normal',
+                    color: readyStatus[item] ? 'green' : '#21a4d6'
+                    }}
+                >
+                    {item}
+                    {item === creator && ' 👑'}
+                    {item === username && ' (you)'}
+                </Text>
+                <Text style={{ marginLeft: 8 }}>
+                    {readyStatus[item] ? '✅ Ready' : '⏳ Not Ready'}
+                </Text>
+            </View>
           )}
         />
       )}
 
-      {!hasPressedReady && (
-        <TouchableOpacity style={styles.button} onPress={handleReady}>
-          <Text style={styles.buttonText}>I'm Ready</Text>
-        </TouchableOpacity>
+      {startError !== "" && (
+        <Text style={styles.error}>{startError}</Text>
       )}
 
-      {isAdmin && allReady && (
+      <TouchableOpacity
+        style={[
+            styles.button,
+            { backgroundColor: readyStatus[username] ? '#20b265' : '#21a4d6' }
+        ]}
+        onPress={handleToggleReady}
+        >
+        <Text style={styles.buttonText}>
+            {readyStatus[username] ? "Ready ✅" : "I'm Ready"}
+        </Text>
+      </TouchableOpacity>
+
+      {isAdmin && (
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: '#20b265' }]}
+          style={[
+            styles.button,
+            { backgroundColor: allReady ? '#20b265' : '#cccccc' }
+          ]}
           onPress={handleStartGame}
+          disabled={!allReady}
         >
           <Text style={styles.buttonText}>Start Game</Text>
         </TouchableOpacity>

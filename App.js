@@ -9,6 +9,7 @@ import MainScreen from './frontend/MainScreen';
 import LoginScreen from './frontend/LoginScreen.js';
 import SignupScreen from './frontend/SignupScreen';
 import WaitingRoom from './frontend/WaitingRoom';
+import GameScreen from './frontend/GameScreen';
 
 const Stack = createNativeStackNavigator();
 const SIGNALR_ENDPOINT = 'https://draw-and-go.azurewebsites.net';
@@ -51,9 +52,14 @@ export default function App() {
         component={SignupScreen} 
         />
         <Stack.Screen
-        name="WaitingRoom"
-        component={WaitingRoom}
-        options={{ headerShown: false }}
+          name="WaitingRoom"
+          component={WaitingRoom}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Game"
+          component={GameScreen}
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>
