@@ -21,6 +21,20 @@ const WaitingRoom = ({ route, navigation }) => {
   const [errorMsg, setErrorMsg] = useState("");
   const [startError, setStartError] = useState(""); // <-- add this line
 
+  const fetchGameEntity = async (gameId) => {
+    try {
+      const response = await fetch(
+        `https://draw-and-go.azurewebsites.net/api/GetGame?gameId=${gameId}`
+      );
+      if (!response.ok) {
+        return null;
+      }
+      return await response.json();
+    } catch (err) {
+      return null;
+    }
+  };
+
   const fetchSession = async () => {
     try {
       const response = await fetch(
@@ -47,6 +61,19 @@ const WaitingRoom = ({ route, navigation }) => {
       setCreator(data.creator || "");
       setErrorMsg(""); // <-- clear error if successful
       setLoading(false);
+
+      // --- If game started, navigate to Game screen with isAdmin ---
+      if (data.isStarted && data.currentGameId) {
+        navigation.navigate('Game', {
+          sessionId,
+          gameId: data.currentGameId,
+          users: data.users,
+          roles: data.roles,
+          painter: data.painter,
+          username,
+          isAdmin // <-- pass isAdmin here
+        });
+      }
     } catch (err) {
       console.error('Failed to fetch session:', err);
       setErrorMsg("Network error or server unavailable.");
@@ -82,32 +109,6 @@ const WaitingRoom = ({ route, navigation }) => {
       return unsubscribe;
     }, [navigation, sessionId, username])
   );
-
-  // SignalR connection for game start event
-  useEffect(() => {
-    const connection = new SignalR.HubConnectionBuilder()
-      .withUrl('https://draw-and-go.azurewebsites.net/api')
-      .withAutomaticReconnect()
-      .build();
-
-    connection.on('gameStarted', (data) => {
-      if (data.sessionId === sessionId) {
-        navigation.navigate('Game', {
-          sessionId: data.sessionId,
-          gameId: data.gameId,
-          users: data.users,
-          painter: data.painter,
-          roles: data.roles,
-          username,
-        });
-      }
-    });
-
-    connection.start();
-    return () => {
-      connection.stop();
-    };
-  }, [sessionId, username, navigation]);
 
   const handleToggleReady = async () => {
     try {

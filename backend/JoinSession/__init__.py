@@ -45,7 +45,15 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 return func.HttpResponse(json.dumps({"error": "Corrupt readyStatus field"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
             return func.HttpResponse(
-                json.dumps({ "users": users, "readyStatus": ready_status, "creator": session.get("creator", "") }),
+                json.dumps({
+                    "users": users,
+                    "readyStatus": ready_status,
+                    "creator": session.get("creator", ""),
+                    "isStarted": session.get("isStarted", False),
+                    "currentGameId": session.get("currentGameId"),
+                    "roles": json.loads(session.get("roles", "{}")) if session.get("roles") else {},
+                    "painter": session.get("painter", "")
+                }),
                 status_code=200,
                 headers={**cors_headers, "Content-Type": "application/json"}
             )

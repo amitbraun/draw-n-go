@@ -1,16 +1,40 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, SafeAreaView, FlatList } from 'react-native';
+import { View, Text, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
 import * as Location from 'expo-location';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 
 const SIGNALR_ENDPOINT = 'https://draw-and-go.azurewebsites.net';
 
-const GameScreen = ({ route }) => {
-  const { sessionId, username, users, painter, roles } = route.params;
+const GameScreen = ({ route, navigation }) => {
+  const {
+    sessionId,
+    gameId,
+    users = [],
+    painter,
+    roles = {},
+    username,
+    isAdmin
+  } = route.params || {};
+
+  // Defensive: check if roles and username are valid
+  const userRole = roles && username && roles[username] ? roles[username] : "Unknown";
+
+  // Optionally, show a warning if roles or username are missing
+  if (!roles || !username) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Text style={{ color: 'red', textAlign: 'center', marginTop: 40 }}>
+          Game data missing or corrupted. Please return to the main screen.
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
   const isPainter = roles[username] === "Painter";
   const [location, setLocation] = useState(null);
   const [trails, setTrails] = useState({}); // { username: [ {latitude, longitude}, ... ] }
+  const [ending, setEnding] = useState(false);
   const connectionRef = useRef(null);
 
   // Helper to send location to backend
@@ -83,6 +107,41 @@ const GameScreen = ({ route }) => {
     };
   }, [sessionId]);
 
+  // Poll session to detect if game ended (for all users)
+  useEffect(() => {
+    if (ending) return;
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(
+          `https://draw-and-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (!data.isStarted) {
+            navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
+          }
+        }
+      } catch (e) {}
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [ending, sessionId, username, isAdmin, navigation]);
+
+  // Admin ends the game
+  const handleEndGame = async () => {
+    setEnding(true);
+    try {
+      await fetch(`${SIGNALR_ENDPOINT}/api/StartGame`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, endGame: true }),
+      });
+      // Optionally, navigate admin immediately
+      navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
+    } catch (err) {
+      setEnding(false);
+    }
+  };
+
   // What to show
   const visibleUsers = isPainter ? users : [username];
 
@@ -92,7 +151,7 @@ const GameScreen = ({ route }) => {
         <Text style={styles.title}>Game Screen</Text>
         <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
         <Text style={styles.placeholderText}>
-          You are: <Text style={{ fontWeight: 'bold' }}>{roles[username]}</Text>
+          You are: <Text style={{ fontWeight: 'bold' }}>{userRole}</Text>
         </Text>
       </View>
       <View style={{ margin: 20 }}>
@@ -101,9 +160,9 @@ const GameScreen = ({ route }) => {
           data={users}
           keyExtractor={item => item}
           renderItem={({ item }) => (
-            <Text>
-              {item} - {roles[item]}{item === painter ? ' 👑' : ''}
-              {item === username ? ' (you)' : ''}
+            <Text style={item === username ? { fontWeight: 'bold' } : {}}>
+              {item} - {roles[item]}
+              {item === users[0] ? ' 👑' : ''}
             </Text>
           )}
         />
@@ -139,6 +198,15 @@ const GameScreen = ({ route }) => {
           </View>
         ))}
       </View>
+      {isAdmin && (
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: '#d9534f', alignSelf: 'center', marginBottom: 20 }]}
+          onPress={handleEndGame}
+          disabled={ending}
+        >
+          <Text style={styles.buttonText}>End Game</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };

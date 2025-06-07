@@ -1,17 +1,19 @@
 {
+  "scriptFile": "__init__.py",
   "bindings": [
     {
       "authLevel": "anonymous",
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": ["post"],
-      "route": "negotiate"
+      "methods": ["get", "post", "options"]
     },
     {
-      "type": "http",
+      "type": "signalRConnectionInfo",
+      "name": "connectionInfo",
+      "hubName": "hub",
       "direction": "out",
-      "name": "$return"
+      "connectionStringSetting": "AzureSignalRConnectionString"
     }
   ]
 }

@@ -7,13 +7,6 @@
       "direction": "in",
       "name": "req",
       "methods": ["post", "options"]
-    },
-    {
-      "type": "signalR",
-      "direction": "out",
-      "name": "signalRMessages",
-      "hubName": "hub",
-      "connectionStringSetting": "AzureSignalRConnectionString"
     }
   ]
 }
