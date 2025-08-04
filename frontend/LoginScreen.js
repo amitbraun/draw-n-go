@@ -27,7 +27,7 @@ const LoginScreen = ({ navigation }) => {
     }
 
     try {
-      const response = await fetch('https://draw-and-go.azurewebsites.net/api/login?', {
+      const response = await fetch('https://draw-n-go.azurewebsites.net/api/login?', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

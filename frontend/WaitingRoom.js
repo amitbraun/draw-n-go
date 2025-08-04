@@ -24,7 +24,7 @@ const WaitingRoom = ({ route, navigation }) => {
   const fetchGameEntity = async (gameId) => {
     try {
       const response = await fetch(
-        `https://draw-and-go.azurewebsites.net/api/GetGame?gameId=${gameId}`
+        `https://draw-n-go.azurewebsites.net/api/GetGame?gameId=${gameId}`
       );
       if (!response.ok) {
         return null;
@@ -38,7 +38,7 @@ const WaitingRoom = ({ route, navigation }) => {
   const fetchSession = async () => {
     try {
       const response = await fetch(
-        `https://draw-and-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
+        `https://draw-n-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
       );
       if (!response.ok) {
         // Try to read error message from response
@@ -91,7 +91,7 @@ const WaitingRoom = ({ route, navigation }) => {
     useCallback(() => {
       const unsubscribe = navigation.addListener('beforeRemove', async () => {
         try {
-          await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+          await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -113,7 +113,7 @@ const WaitingRoom = ({ route, navigation }) => {
   const handleToggleReady = async () => {
     try {
         const isReady = readyStatus[username];
-        await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+        await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -132,7 +132,7 @@ const WaitingRoom = ({ route, navigation }) => {
 
   const handleLeave = async () => {
     try {
-      await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+      await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,7 +160,7 @@ const WaitingRoom = ({ route, navigation }) => {
     setStartError(""); // clear any previous error
 
     try {
-      await fetch('https://draw-and-go.azurewebsites.net/api/StartGame', {
+      await fetch('https://draw-n-go.azurewebsites.net/api/StartGame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId }),

@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 
-const SIGNALR_ENDPOINT = 'https://draw-and-go.azurewebsites.net';
+const SIGNALR_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
 
 const GameScreen = ({ route, navigation }) => {
   const {
@@ -113,7 +113,7 @@ const GameScreen = ({ route, navigation }) => {
     const interval = setInterval(async () => {
       try {
         const response = await fetch(
-          `https://draw-and-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
+          `https://draw-n-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
         );
         if (response.ok) {
           const data = await response.json();

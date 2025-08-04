@@ -1,9 +1,9 @@
 {
     "IsEncrypted": false,
     "Values": {
-      "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=drawandgob6d6;AccountKey=2Nmtpe4M8rs+1lz92l85d9cFrnIMm25yU+zGbGVwQ5thPUfLNTZb84xt/ULunVkqe8gGeT546pqm+ASteJ0r4g==;EndpointSuffix=core.windows.net",
+      "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=drawandgo83cb;AccountKey=FoiSOFSwYTfv5sYoZLszW+aXDGZxgF2cJDbPPB4zgGe/FGW5ywwAKBAq9YJu61UlQ8MqWf39c+UU+AStfli0LQ==;EndpointSuffix=core.windows.net",
       "FUNCTIONS_WORKER_RUNTIME": "python",
-      "AzureSignalRConnectionString": "Endpoint=https://drawandgo.service.signalr.net;AccessKey=92w1vLBxETHl4lW3IJVIrXgQwOp8KcJvyae5hgp7gGEv880uvfYGJQQJ99BFACYeBjFXJ3w3AAAAASRSeZ5u;Version=1.0;"
+      "AzureSignalRConnectionString": "Endpoint=https://drawngo.service.signalr.net;AccessKey=AjcBMjcFGqYu1hJk0NkWrJrzHsmvbSIetQ0tl6ic6aCGxHUTDxTPJQQJ99BHACYeBjFXJ3w3AAAAASRSep2u;Version=1.0;"
     }
   }
   

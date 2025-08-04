@@ -35,7 +35,7 @@ const MainScreen = ({ navigation, route }) => {
 
     if (selectedAction === 'Create') {
       try {
-        const response = await fetch('https://draw-and-go.azurewebsites.net/api/CreateSession', {
+        const response = await fetch('https://draw-n-go.azurewebsites.net/api/CreateSession', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -67,7 +67,7 @@ const MainScreen = ({ navigation, route }) => {
         : { creator: joinKey };
 
       try {
-        const response = await fetch('https://draw-and-go.azurewebsites.net/api/JoinSession', {
+        const response = await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -12,7 +12,7 @@ import WaitingRoom from './frontend/WaitingRoom';
 import GameScreen from './frontend/GameScreen';
 
 const Stack = createNativeStackNavigator();
-const SIGNALR_ENDPOINT = 'https://draw-and-go.azurewebsites.net';
+const SIGNALR_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
 let clientId = uuidv4();
 
 export default function App() {
