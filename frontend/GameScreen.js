@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 
-const SIGNALR_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
+const FUNCTION_APP_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
 
 const GameScreen = ({ route, navigation }) => {
   const {
@@ -40,7 +40,7 @@ const GameScreen = ({ route, navigation }) => {
   // Helper to send location to backend
   const sendLocation = async (coords) => {
     try {
-      await fetch(`${SIGNALR_ENDPOINT}/api/sendLocation`, {
+      await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,34 +76,59 @@ const GameScreen = ({ route, navigation }) => {
 
   // SignalR connection for receiving locations
   useEffect(() => {
-    const connection = new SignalR.HubConnectionBuilder()
-      .withUrl(`${SIGNALR_ENDPOINT}/api`)
-      .withAutomaticReconnect()
-      .build();
+    let connection;
+    let stopped = false;
 
-    connection.on('receiveLocation', (sender, data) => {
-      if (data.sessionId !== sessionId) return;
-      setTrails(prev => {
-        const prevTrail = prev[data.username] || [];
-        // Only add if new
-        if (
-          prevTrail.length === 0 ||
-          prevTrail[prevTrail.length - 1].latitude !== data.latitude ||
-          prevTrail[prevTrail.length - 1].longitude !== data.longitude
-        ) {
-          return {
-            ...prev,
-            [data.username]: [...prevTrail, { latitude: data.latitude, longitude: data.longitude }]
-          };
-        }
-        return prev;
+    const startSignalR = async () => {
+      const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/negotiate`, { method: 'POST' });
+      const text = await res.text();
+      if (!res.ok) {
+        // Show both status and response body for debugging
+        throw new Error(`Negotiate failed: ${res.status}\nResponse: ${text}`);
+      }
+      let negotiateData;
+      try {
+        negotiateData = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Negotiate returned invalid JSON: ${text}`);
+      }
+      const { url, accessToken } = negotiateData;
+
+      connection = new SignalR.HubConnectionBuilder()
+        .withUrl(url, { accessTokenFactory: () => accessToken })
+        .withAutomaticReconnect()
+        .build();
+
+      connection.on('receiveLocation', (sender, data) => {
+        if (data.sessionId !== sessionId) return;
+        setTrails(prev => {
+          const prevTrail = prev[data.username] || [];
+          // Only add if new
+          if (
+            prevTrail.length === 0 ||
+            prevTrail[prevTrail.length - 1].latitude !== data.latitude ||
+            prevTrail[prevTrail.length - 1].longitude !== data.longitude
+          ) {
+            return {
+              ...prev,
+              [data.username]: [...prevTrail, { latitude: data.latitude, longitude: data.longitude }]
+            };
+          }
+          return prev;
+        });
       });
-    });
 
-    connection.start();
-    connectionRef.current = connection;
+      await connection.start();
+      connectionRef.current = connection;
+    };
+
+    startSignalR();
+
     return () => {
-      connection.stop();
+      stopped = true;
+      if (connectionRef.current) {
+        connectionRef.current.stop();
+      }
     };
   }, [sessionId]);
 
@@ -113,7 +138,7 @@ const GameScreen = ({ route, navigation }) => {
     const interval = setInterval(async () => {
       try {
         const response = await fetch(
-          `https://draw-n-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
+          `${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}`
         );
         if (response.ok) {
           const data = await response.json();
@@ -130,7 +155,7 @@ const GameScreen = ({ route, navigation }) => {
   const handleEndGame = async () => {
     setEnding(true);
     try {
-      await fetch(`${SIGNALR_ENDPOINT}/api/StartGame`, {
+      await fetch(`${FUNCTION_APP_ENDPOINT}/api/StartGame`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, endGame: true }),

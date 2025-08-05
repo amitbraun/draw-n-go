@@ -3,7 +3,7 @@
     "Values": {
       "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=drawandgo83cb;AccountKey=FoiSOFSwYTfv5sYoZLszW+aXDGZxgF2cJDbPPB4zgGe/FGW5ywwAKBAq9YJu61UlQ8MqWf39c+UU+AStfli0LQ==;EndpointSuffix=core.windows.net",
       "FUNCTIONS_WORKER_RUNTIME": "python",
-      "AzureSignalRConnectionString": "Endpoint=https://drawngo.service.signalr.net;AccessKey=AjcBMjcFGqYu1hJk0NkWrJrzHsmvbSIetQ0tl6ic6aCGxHUTDxTPJQQJ99BHACYeBjFXJ3w3AAAAASRSep2u;Version=1.0;"
+      "AzureSignalRConnectionString": "Endpoint=https://drawngo.service.signalr.net;AccessKey=1yzeotv1yCFVy2wywhxZAxPZ0RTcwfFpu0UyVUHllhLKaWOEZo1iJQQJ99BHACYeBjFXJ3w3AAAAASRSXlxa;Version=1.0;"
     }
   }
   
