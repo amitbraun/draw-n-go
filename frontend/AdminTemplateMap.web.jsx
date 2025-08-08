@@ -3,7 +3,6 @@ import { GoogleMap, Marker, Polygon, useJsApiLoader } from "@react-google-maps/a
 import Constants from "expo-constants";
 
 export default function AdminTemplateMap({
-  initialCenter,
   initialRadiusMeters = 120,
   onConfirm,
 }) {
@@ -50,31 +49,23 @@ export default function AdminTemplateMap({
 
   // --- permissions + current location (web-safe with browser geolocation) ---
   useEffect(() => {
-    // Only set initial position if center is not set yet
-    if (center) return;
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const lat = initialCenter?.latitude ?? pos.coords.latitude;
-          const lng = initialCenter?.longitude ?? pos.coords.longitude;
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
           setCenter({ lat, lng });
           setMyRegion({ lat, lng });
           setLoading(false);
         },
         () => {
-          if (initialCenter) {
-            setCenter({ lat: initialCenter.latitude, lng: initialCenter.longitude });
-            setMyRegion({ lat: initialCenter.latitude, lng: initialCenter.longitude });
-          }
           setLoading(false);
         }
       );
-    } else if (initialCenter) {
-      setCenter({ lat: initialCenter.latitude, lng: initialCenter.longitude });
-      setMyRegion({ lat: initialCenter.latitude, lng: initialCenter.longitude });
+    } else {
       setLoading(false);
     }
-  }, [initialCenter, center]);
+  }, []);
 
   const bumpRadius = useCallback(
     (mult) => {
@@ -109,7 +100,7 @@ export default function AdminTemplateMap({
     return (
       <div style={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
         <span>
-          Location unavailable. Check site permission or provide an initialCenter.
+          Location unavailable. Check site permission.
         </span>
       </div>
     );

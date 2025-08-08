@@ -258,7 +258,6 @@ const WaitingRoom = ({ route, navigation }) => {
         <AdminTemplateMap
           onConfirm={isAdmin ? handleTemplateConfirm : undefined} // only admins can save
           initialRadiusMeters={120}
-          initialCenter={{ latitude: 32.0750, longitude: 34.8144 }} // fallback
         />
         {templateMsg ? (
           <View style={{ position: 'absolute', bottom: 8, left: 8, right: 8, alignItems: 'center' }}>
