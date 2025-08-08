@@ -10,6 +10,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
+import AdminTemplateMap from './AdminTemplateMap';
 
 const WaitingRoom = ({ route, navigation }) => {
   const { sessionId, username, isAdmin } = route.params;
@@ -19,18 +20,17 @@ const WaitingRoom = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [creator, setCreator] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [startError, setStartError] = useState(""); // <-- add this line
+  const [startError, setStartError] = useState("");
+  const [templateMsg, setTemplateMsg] = useState("");
 
   const fetchGameEntity = async (gameId) => {
     try {
       const response = await fetch(
         `https://draw-n-go.azurewebsites.net/api/GetGame?gameId=${gameId}`
       );
-      if (!response.ok) {
-        return null;
-      }
+      if (!response.ok) return null;
       return await response.json();
-    } catch (err) {
+    } catch {
       return null;
     }
   };
@@ -41,17 +41,15 @@ const WaitingRoom = ({ route, navigation }) => {
         `https://draw-n-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
       );
       if (!response.ok) {
-        // Try to read error message from response
-        let errorMsg = 'Unknown error';
+        let errTxt = 'Unknown error';
         try {
           const errData = await response.json();
-          errorMsg = errData.error || JSON.stringify(errData);
-        } catch (e) {
-          errorMsg = response.statusText;
+          errTxt = errData.error || JSON.stringify(errData);
+        } catch {
+          errTxt = response.statusText;
         }
-        console.error('Failed to fetch session:', errorMsg);
-
-        setErrorMsg(errorMsg); // <-- set error message
+        console.error('Failed to fetch session:', errTxt);
+        setErrorMsg(errTxt);
         setLoading(false);
         return;
       }
@@ -59,10 +57,9 @@ const WaitingRoom = ({ route, navigation }) => {
       setUsers(data.users || []);
       setReadyStatus(data.readyStatus || {});
       setCreator(data.creator || "");
-      setErrorMsg(""); // <-- clear error if successful
+      setErrorMsg("");
       setLoading(false);
 
-      // --- If game started, navigate to Game screen with isAdmin ---
       if (data.isStarted && data.currentGameId) {
         navigation.navigate('Game', {
           sessionId,
@@ -71,7 +68,7 @@ const WaitingRoom = ({ route, navigation }) => {
           roles: data.roles,
           painter: data.painter,
           username,
-          isAdmin // <-- pass isAdmin here
+          isAdmin
         });
       }
     } catch (err) {
@@ -83,7 +80,7 @@ const WaitingRoom = ({ route, navigation }) => {
 
   useEffect(() => {
     fetchSession();
-    const interval = setInterval(fetchSession, 3000); // poll every 3 seconds
+    const interval = setInterval(fetchSession, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -112,21 +109,21 @@ const WaitingRoom = ({ route, navigation }) => {
 
   const handleToggleReady = async () => {
     try {
-        const isReady = readyStatus[username];
-        await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-username': username
-            },
-            body: JSON.stringify({
-                sessionId,
-                setReady: !isReady
-            }),
-        });
-       fetchSession();
+      const isReady = readyStatus[username];
+      await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({
+          sessionId,
+          setReady: !isReady
+        }),
+      });
+      fetchSession();
     } catch (err) {
-        console.error('Failed to toggle ready:', err);
+      console.error('Failed to toggle ready:', err);
     }
   };
 
@@ -157,7 +154,7 @@ const WaitingRoom = ({ route, navigation }) => {
       setStartError("All players must be ready to start the game.");
       return;
     }
-    setStartError(""); // clear any previous error
+    setStartError("");
 
     try {
       await fetch('https://draw-n-go.azurewebsites.net/api/StartGame', {
@@ -170,11 +167,58 @@ const WaitingRoom = ({ route, navigation }) => {
     }
   };
 
+  // For when admin sets the template
+  const handleTemplateConfirm = async ({ templateId, center, radiusMeters }) => {
+    try {
+      setTemplateMsg('Saving template…');
+      const res = await fetch('https://draw-n-go.azurewebsites.net/api/SetTemplate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-username': username,
+        },
+        body: JSON.stringify({
+          sessionId,
+          templateId,
+          center,
+          radiusMeters,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        setTemplateMsg(`Failed to save template: ${err}`);
+      } else {
+        setTemplateMsg('Template set ✅');
+        fetchSession();
+      }
+    } catch (e) {
+      setTemplateMsg('Failed to save template (network).');
+    } finally {
+      setTimeout(() => setTemplateMsg(''), 2000);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Waiting Room</Text>
         <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
+      </View>
+
+      {/* Map visible for everyone */}
+      <View style={{ height: 300, marginHorizontal: 12, marginBottom: 12, borderRadius: 12, overflow: 'hidden' }}>
+        <AdminTemplateMap
+          onConfirm={isAdmin ? handleTemplateConfirm : undefined} // only admins can save
+          initialRadiusMeters={120}
+          initialCenter={{ latitude: 32.0750, longitude: 34.8144 }} // fallback
+        />
+        {templateMsg ? (
+          <View style={{ position: 'absolute', bottom: 8, left: 8, right: 8, alignItems: 'center' }}>
+            <Text style={{ backgroundColor: 'rgba(255,255,255,0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+              {templateMsg}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
@@ -189,20 +233,20 @@ const WaitingRoom = ({ route, navigation }) => {
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
-                <Text
-                    style={{
-                    ...styles.dropdownItem,
-                    fontWeight: item === username ? 'bold' : 'normal',
-                    color: readyStatus[item] ? 'green' : '#21a4d6'
-                    }}
-                >
-                    {item}
-                    {item === creator && ' 👑'}
-                    {item === username && ' (you)'}
-                </Text>
-                <Text style={{ marginLeft: 8 }}>
-                    {readyStatus[item] ? '✅ Ready' : '⏳ Not Ready'}
-                </Text>
+              <Text
+                style={{
+                  ...styles.dropdownItem,
+                  fontWeight: item === username ? 'bold' : 'normal',
+                  color: readyStatus[item] ? 'green' : '#21a4d6'
+                }}
+              >
+                {item}
+                {item === creator && ' 👑'}
+                {item === username && ' (you)'}
+              </Text>
+              <Text style={{ marginLeft: 8 }}>
+                {readyStatus[item] ? '✅ Ready' : '⏳ Not Ready'}
+              </Text>
             </View>
           )}
         />
@@ -214,13 +258,13 @@ const WaitingRoom = ({ route, navigation }) => {
 
       <TouchableOpacity
         style={[
-            styles.button,
-            { backgroundColor: readyStatus[username] ? '#20b265' : '#21a4d6' }
+          styles.button,
+          { backgroundColor: readyStatus[username] ? '#20b265' : '#21a4d6' }
         ]}
         onPress={handleToggleReady}
-        >
+      >
         <Text style={styles.buttonText}>
-            {readyStatus[username] ? "Ready ✅" : "I'm Ready"}
+          {readyStatus[username] ? "Ready ✅" : "I'm Ready"}
         </Text>
       </TouchableOpacity>
 
