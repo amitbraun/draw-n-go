@@ -11,6 +11,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 
+const SHAPES = [
+  { label: 'Circle', value: 'circle' },
+  { label: 'Polygon', value: 'polygon' },
+  { label: 'Rectangle', value: 'rectangle' },
+  { label: 'Square', value: 'square' },
+  { label: 'Triangle', value: 'triangle' },
+];
+
 const WaitingRoom = ({ route, navigation }) => {
   const { sessionId, username, isAdmin } = route.params;
 
@@ -19,7 +27,8 @@ const WaitingRoom = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [creator, setCreator] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [startError, setStartError] = useState(""); // <-- add this line
+  const [startError, setStartError] = useState("");
+  const [selectedShape, setSelectedShape] = useState(SHAPES[0].value);
 
   const fetchGameEntity = async (gameId) => {
     try {
@@ -75,6 +84,10 @@ const WaitingRoom = ({ route, navigation }) => {
       setCreator(data.creator || "");
       setErrorMsg("");
       setLoading(false);
+      if (data.selectedShape && data.selectedShape !== selectedShape) {
+        setSelectedShape(data.selectedShape);
+      }
+
       if (data.isStarted && data.currentGameId) {
         navigation.navigate('Game', {
           sessionId,
@@ -83,7 +96,8 @@ const WaitingRoom = ({ route, navigation }) => {
           roles: data.roles,
           painter: data.painter,
           username,
-          isAdmin
+          isAdmin,
+          chosenShape: data.selectedShape || selectedShape,
         });
       }
     } catch (err) {
@@ -96,7 +110,7 @@ const WaitingRoom = ({ route, navigation }) => {
     fetchSession();
     const interval = setInterval(fetchSession, 3000); // poll every 3 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedShape]);
 
   useFocusEffect(
     useCallback(() => {
@@ -180,9 +194,30 @@ const WaitingRoom = ({ route, navigation }) => {
     }
   };
 
-
-
   const allReady = users.length > 0 && users.every(user => readyStatus[user]);
+
+  const handleShapeSelect = async (shapeValue) => {
+    setSelectedShape(shapeValue);
+
+    if (!sessionId) return;
+    try {
+      // Update the selectedShape in backend session entity
+      await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-username': username,
+        },
+        body: JSON.stringify({
+          sessionId,
+          selectedShape: shapeValue,
+        }),
+      });
+      // No need to immediately fetchSession() because polling will pick this up
+    } catch (err) {
+      console.warn("Failed to update selected shape:", err);
+    }
+  };
 
   const handleStartGame = async () => {
     if (!allReady) {
@@ -221,6 +256,42 @@ const WaitingRoom = ({ route, navigation }) => {
         <Text style={styles.title}>Waiting Room</Text>
         <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
       </View>
+
+      {isAdmin && (
+        <View style={{ margin: 12, alignItems: 'center' }}>
+          <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>Choose a shape:</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {SHAPES.map(shape => (
+              <TouchableOpacity
+                key={shape.value}
+                style={{
+                  padding: 8,
+                  margin: 4,
+                  borderWidth: 2,
+                  borderColor: selectedShape === shape.value ? '#21a4d6' : '#ccc',
+                  borderRadius: 8,
+                  backgroundColor: selectedShape === shape.value ? '#e0f7fa' : '#fff',
+                }}
+                onPress={() => handleShapeSelect(shape.value)}
+              >
+                <Text style={{ color: '#21a4d6', fontWeight: selectedShape === shape.value ? 'bold' : 'normal' }}>{shape.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={{ marginTop: 6, color: '#21a4d6' }}>
+            Selected: <Text style={{ fontWeight: 'bold' }}>{SHAPES.find(s => s.value === selectedShape)?.label}</Text>
+          </Text>
+        </View>
+      )}
+
+      {!isAdmin && (
+        <View style={{ margin: 12, alignItems: 'center' }}>
+          <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>Chosen shape for this game:</Text>
+          <Text style={{ color: '#21a4d6', fontWeight: 'bold' }}>
+            {SHAPES.find(s => s.value === selectedShape)?.label}
+          </Text>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator size="large" color="#21a4d6" />

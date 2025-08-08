@@ -47,7 +47,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     "isStarted": session.get("isStarted", False),
                     "currentGameId": session.get("currentGameId"),
                     "roles": json.loads(session.get("roles", "{}")) if session.get("roles") else {},
-                    "painter": session.get("painter", "")
+                    "painter": session.get("painter", ""),
+                    "selectedShape": session.get("selectedShape")
                 }),
                 status_code=200,
                 headers={**cors_headers, "Content-Type": "application/json"}
@@ -64,6 +65,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             creator_username = data.get("creator")
             set_ready = data.get("setReady", False)
             leave = data.get("leave", False)
+            new_selected_shape = data.get("selectedShape")
 
             # Resolve session
             session = None
@@ -85,7 +87,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
             if session.get("isStarted", False):
                 return func.HttpResponse(json.dumps({"error": "Session already started"}), status_code=403, headers={**cors_headers, "Content-Type": "application/json"})
-
+            
+            if "selectedShape" in data:
+                session["selectedShape"] = data["selectedShape"]
+                session_table.update_entity(session, mode="merge")
+                return func.HttpResponse(json.dumps({"message": "Selected shape updated"}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
+            
             users = json.loads(session.get("users", "[]"))
             ready_status = json.loads(session.get("readyStatus", "{}"))
 
@@ -134,6 +141,13 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             session["users"] = json.dumps(users)
             session["readyStatus"] = json.dumps(ready_status)
             session_table.update_entity(session, mode="merge")
+            
+            # === Handle select shape ===
+            if new_selected_shape is not None:
+                if username == session.get("creator"):
+                    session["selectedShape"] = new_selected_shape
+                else:
+                    return func.HttpResponse(json.dumps({"error": "Only creator can change selectedShape"}), status_code=403, headers={**cors_headers, "Content-Type": "application/json"})
 
             return func.HttpResponse(
                 json.dumps({ "message": "Success", "sessionId": session_id }),
