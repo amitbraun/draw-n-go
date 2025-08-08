@@ -1,8 +1,6 @@
 import azure.functions as func
-import os
-import logging
 
-def main(req: func.HttpRequest, connectionInfo: func.SignalRConnectionInfo) -> func.HttpResponse:
+def main(req: func.HttpRequest) -> func.HttpResponse:
     cors_headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -12,17 +10,10 @@ def main(req: func.HttpRequest, connectionInfo: func.SignalRConnectionInfo) -> f
     if req.method == "OPTIONS":
         return func.HttpResponse("", status_code=200, headers=cors_headers)
 
-    if not connectionInfo:
-        return func.HttpResponse(
-            '{"error": "SignalR connection info not available. Check AzureSignalRConnectionString app setting and SignalR resource health."}',
-            mimetype="application/json",
-            status_code=500,
-            headers=cors_headers
-        )
-
+    # No SignalR support; return 404 for all other requests
     return func.HttpResponse(
-        connectionInfo.to_json(),
+        '{"error": "SignalR is not supported."}',
         mimetype="application/json",
-        status_code=200,
+        status_code=404,
         headers=cors_headers
     )

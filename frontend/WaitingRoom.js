@@ -36,33 +36,45 @@ const WaitingRoom = ({ route, navigation }) => {
   };
 
   const fetchSession = async () => {
+    if (!sessionId || !username) {
+      setErrorMsg("Missing sessionId or username");
+      setLoading(false);
+      return;
+    }
     try {
       const response = await fetch(
         `https://draw-n-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
       );
       if (!response.ok) {
-        // Try to read error message from response
         let errorMsg = 'Unknown error';
+        let shouldKick = false;
         try {
           const errData = await response.json();
           errorMsg = errData.error || JSON.stringify(errData);
+          // If session deleted, kick user out
+          if (
+            errorMsg.includes('Session not found') ||
+            errorMsg.includes('Session deleted') ||
+            response.status === 404
+          ) {
+            shouldKick = true;
+          }
         } catch (e) {
           errorMsg = response.statusText;
         }
-        console.error('Failed to fetch session:', errorMsg);
-
-        setErrorMsg(errorMsg); // <-- set error message
+        setErrorMsg(errorMsg);
         setLoading(false);
+        if (shouldKick) {
+          navigation.navigate('Main', { username });
+        }
         return;
       }
       const data = await response.json();
       setUsers(data.users || []);
       setReadyStatus(data.readyStatus || {});
       setCreator(data.creator || "");
-      setErrorMsg(""); // <-- clear error if successful
+      setErrorMsg("");
       setLoading(false);
-
-      // --- If game started, navigate to Game screen with isAdmin ---
       if (data.isStarted && data.currentGameId) {
         navigation.navigate('Game', {
           sessionId,
@@ -71,11 +83,10 @@ const WaitingRoom = ({ route, navigation }) => {
           roles: data.roles,
           painter: data.painter,
           username,
-          isAdmin // <-- pass isAdmin here
+          isAdmin
         });
       }
     } catch (err) {
-      console.error('Failed to fetch session:', err);
       setErrorMsg("Network error or server unavailable.");
       setLoading(false);
     }
@@ -111,28 +122,37 @@ const WaitingRoom = ({ route, navigation }) => {
   );
 
   const handleToggleReady = async () => {
+    if (!sessionId || !username) {
+      setErrorMsg("Missing sessionId or username");
+      return;
+    }
     try {
-        const isReady = readyStatus[username];
-        await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-username': username
-            },
-            body: JSON.stringify({
-                sessionId,
-                setReady: !isReady
-            }),
-        });
-       fetchSession();
+      const isReady = readyStatus[username];
+      await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({
+          sessionId,
+          setReady: !isReady
+        }),
+      });
+      fetchSession();
     } catch (err) {
-        console.error('Failed to toggle ready:', err);
+      setErrorMsg('Failed to toggle ready');
     }
   };
 
   const handleLeave = async () => {
+    if (!sessionId || !username) {
+      setErrorMsg("Missing sessionId or username");
+      navigation.navigate('Main', { username });
+      return;
+    }
     try {
-      await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
+      const response = await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -143,12 +163,24 @@ const WaitingRoom = ({ route, navigation }) => {
           leave: true,
         }),
       });
+      if (!response.ok) {
+        let errorMsg = 'Unknown error';
+        try {
+          const errData = await response.json();
+          errorMsg = errData.error || JSON.stringify(errData);
+        } catch (e) {
+          errorMsg = response.statusText;
+        }
+        setErrorMsg(errorMsg);
+      }
     } catch (err) {
-      console.error('Failed to leave session:', err);
+      setErrorMsg("Failed to leave session");
     } finally {
       navigation.navigate('Main', { username });
     }
   };
+
+
 
   const allReady = users.length > 0 && users.every(user => readyStatus[user]);
 
@@ -157,14 +189,27 @@ const WaitingRoom = ({ route, navigation }) => {
       setStartError("All players must be ready to start the game.");
       return;
     }
-    setStartError(""); // clear any previous error
-
+    if (!sessionId || !username) {
+      setStartError("Missing sessionId or username");
+      return;
+    }
+    setStartError("");
     try {
-      await fetch('https://draw-n-go.azurewebsites.net/api/StartGame', {
+      const response = await fetch('https://draw-n-go.azurewebsites.net/api/StartGame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId }),
       });
+      if (!response.ok) {
+        let errorMsg = 'Failed to start game.';
+        try {
+          const errData = await response.json();
+          errorMsg = errData.error || JSON.stringify(errData);
+        } catch (e) {
+          errorMsg = response.statusText;
+        }
+        setStartError(errorMsg);
+      }
     } catch (err) {
       setStartError("Failed to start game.");
     }
@@ -241,7 +286,7 @@ const WaitingRoom = ({ route, navigation }) => {
         style={[styles.button, { backgroundColor: '#d9534f' }]}
         onPress={handleLeave}
       >
-        <Text style={styles.buttonText}>Leave Session</Text>
+        <Text style={styles.buttonText}>{isAdmin ? 'End Session' : 'Leave Session'}</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );

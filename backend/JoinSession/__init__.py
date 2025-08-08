@@ -24,14 +24,9 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             if not session_id:
                 return func.HttpResponse(json.dumps({"error": "Missing sessionId"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
 
-            # Debug log: print partition key and row key
-            print(f"DEBUG: Looking up session with PartitionKey='session', RowKey='{session_id}'")
-
             try:
                 session = session_table.get_entity(partition_key="session", row_key=session_id)
-            except Exception as e:
-                # Add error logging for debugging
-                print(f"DEBUG: get_entity failed for PartitionKey='session', RowKey='{session_id}': {str(e)}")
+            except Exception as e:            
                 return func.HttpResponse(json.dumps({"error": f"Session not found: {str(e)}"}), status_code=404, headers={**cors_headers, "Content-Type": "application/json"})
 
             try:
@@ -102,7 +97,15 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 users.remove(username)
                 ready_status.pop(username, None)
 
-                if len(users) == 0:
+                # If the user leaving is the creator/admin, delete the session for everyone
+                if username == session.get("creator"):
+                    session_table.delete_entity(partition_key="session", row_key=session_id)
+                    return func.HttpResponse(
+                        json.dumps({ "message": "Session deleted by admin" }),
+                        status_code=200,
+                        headers={**cors_headers, "Content-Type": "application/json" }
+                    )
+                elif len(users) == 0:
                     session_table.delete_entity(partition_key="session", row_key=session_id)
                     return func.HttpResponse(
                         json.dumps({ "message": "Session deleted" }),
