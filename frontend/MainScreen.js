@@ -92,6 +92,10 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
+  const handleLogout = () => {
+    navigation.replace('Login');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.middlePlaceholder}>
@@ -100,7 +104,7 @@ const MainScreen = ({ navigation, route }) => {
       </View>
 
       <View style={styles.actionContainer}>
-          {selectedAction === 'Join' && (
+        {selectedAction === 'Join' && (
           <TextInput
             style={styles.input}
             placeholder="Session ID or Creator"
@@ -138,6 +142,10 @@ const MainScreen = ({ navigation, route }) => {
             <Text style={styles.notificationText}>{notification}</Text>
           </View>
         )}
+
+        <TouchableOpacity style={[styles.button, { backgroundColor: '#d9534f', marginTop: 24 }]} onPress={handleLogout}>
+          <Text style={styles.buttonText}>Logout</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
