@@ -10,6 +10,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
+import AdminTemplateMap from './AdminTemplateMap';
 
 const WaitingRoom = ({ route, navigation }) => {
   const { sessionId, username, isAdmin } = route.params;
@@ -19,7 +20,8 @@ const WaitingRoom = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [creator, setCreator] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [startError, setStartError] = useState(""); // <-- add this line
+  const [startError, setStartError] = useState("");
+  const [templateMsg, setTemplateMsg] = useState("");
 
   const fetchGameEntity = async (gameId) => {
     try {
@@ -180,8 +182,6 @@ const WaitingRoom = ({ route, navigation }) => {
     }
   };
 
-
-
   const allReady = users.length > 0 && users.every(user => readyStatus[user]);
 
   const handleStartGame = async () => {
@@ -215,11 +215,58 @@ const WaitingRoom = ({ route, navigation }) => {
     }
   };
 
+  // For when admin sets the template
+  const handleTemplateConfirm = async ({ templateId, center, radiusMeters }) => {
+    try {
+      setTemplateMsg('Saving template…');
+      const res = await fetch('https://draw-n-go.azurewebsites.net/api/SetTemplate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-username': username,
+        },
+        body: JSON.stringify({
+          sessionId,
+          templateId,
+          center,
+          radiusMeters,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        setTemplateMsg(`Failed to save template: ${err}`);
+      } else {
+        setTemplateMsg('Template set ✅');
+        fetchSession();
+      }
+    } catch (e) {
+      setTemplateMsg('Failed to save template (network).');
+    } finally {
+      setTimeout(() => setTemplateMsg(''), 2000);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Waiting Room</Text>
         <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
+      </View>
+
+      {/* Map visible for everyone */}
+      <View style={{ height: 300, marginHorizontal: 12, marginBottom: 12, borderRadius: 12, overflow: 'hidden' }}>
+        <AdminTemplateMap
+          onConfirm={isAdmin ? handleTemplateConfirm : undefined} // only admins can save
+          initialRadiusMeters={120}
+          initialCenter={{ latitude: 32.0750, longitude: 34.8144 }} // fallback
+        />
+        {templateMsg ? (
+          <View style={{ position: 'absolute', bottom: 8, left: 8, right: 8, alignItems: 'center' }}>
+            <Text style={{ backgroundColor: 'rgba(255,255,255,0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+              {templateMsg}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
@@ -234,20 +281,20 @@ const WaitingRoom = ({ route, navigation }) => {
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
-                <Text
-                    style={{
-                    ...styles.dropdownItem,
-                    fontWeight: item === username ? 'bold' : 'normal',
-                    color: readyStatus[item] ? 'green' : '#21a4d6'
-                    }}
-                >
-                    {item}
-                    {item === creator && ' 👑'}
-                    {item === username && ' (you)'}
-                </Text>
-                <Text style={{ marginLeft: 8 }}>
-                    {readyStatus[item] ? '✅ Ready' : '⏳ Not Ready'}
-                </Text>
+              <Text
+                style={{
+                  ...styles.dropdownItem,
+                  fontWeight: item === username ? 'bold' : 'normal',
+                  color: readyStatus[item] ? 'green' : '#21a4d6'
+                }}
+              >
+                {item}
+                {item === creator && ' 👑'}
+                {item === username && ' (you)'}
+              </Text>
+              <Text style={{ marginLeft: 8 }}>
+                {readyStatus[item] ? '✅ Ready' : '⏳ Not Ready'}
+              </Text>
             </View>
           )}
         />
@@ -259,13 +306,13 @@ const WaitingRoom = ({ route, navigation }) => {
 
       <TouchableOpacity
         style={[
-            styles.button,
-            { backgroundColor: readyStatus[username] ? '#20b265' : '#21a4d6' }
+          styles.button,
+          { backgroundColor: readyStatus[username] ? '#20b265' : '#21a4d6' }
         ]}
         onPress={handleToggleReady}
-        >
+      >
         <Text style={styles.buttonText}>
-            {readyStatus[username] ? "Ready ✅" : "I'm Ready"}
+          {readyStatus[username] ? "Ready ✅" : "I'm Ready"}
         </Text>
       </TouchableOpacity>
 
