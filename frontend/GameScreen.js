@@ -37,18 +37,20 @@ const GameScreen = ({ route, navigation }) => {
   const [ending, setEnding] = useState(false);
   const connectionRef = useRef(null);
 
-  // Helper to send location to backend
+  // Helper to send location to backend (only for Brushes)
   const sendLocation = async (coords) => {
     try {
       await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId,
+          gameId,
           username,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          timestamp: Date.now(),
+          location: {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            timestamp: Date.now(),
+          },
         }),
       });
     } catch (err) {
@@ -56,8 +58,9 @@ const GameScreen = ({ route, navigation }) => {
     }
   };
 
-  // Get location and send periodically
+  // Only Brushes send their location periodically
   useEffect(() => {
+    if (roles[username] !== 'Brush') return;
     let interval;
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -72,65 +75,37 @@ const GameScreen = ({ route, navigation }) => {
       }, 3000);
     })();
     return () => interval && clearInterval(interval);
-  }, []);
+  }, [roles, username]);
 
-  // SignalR connection for receiving locations
+  // Only the Painter polls for all locations
   useEffect(() => {
-    let connection;
-    let stopped = false;
-
-    const startSignalR = async () => {
-      const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/negotiate`, { method: 'POST' });
-      const text = await res.text();
-      if (!res.ok) {
-        // Show both status and response body for debugging
-        throw new Error(`Negotiate failed: ${res.status}\nResponse: ${text}`);
-      }
-      let negotiateData;
+    if (roles[username] !== 'Painter') return;
+    let interval;
+    const pollLocations = async () => {
       try {
-        negotiateData = JSON.parse(text);
+        const res = await fetch(
+          `${FUNCTION_APP_ENDPOINT}/api/getLocations?gameId=${gameId}`
+        );
+        if (res.ok) {
+          const locations = await res.json();
+          // Convert to trails format: { username: [{latitude, longitude}, ...] }
+          const newTrails = {};
+          locations.forEach(loc => {
+            newTrails[loc.username] = [
+              ...(trails[loc.username] || []),
+              { latitude: loc.latitude, longitude: loc.longitude }
+            ];
+          });
+          setTrails(newTrails);
+        }
       } catch (e) {
-        throw new Error(`Negotiate returned invalid JSON: ${text}`);
-      }
-      const { url, accessToken } = negotiateData;
-
-      connection = new SignalR.HubConnectionBuilder()
-        .withUrl(url, { accessTokenFactory: () => accessToken })
-        .withAutomaticReconnect()
-        .build();
-
-      connection.on('receiveLocation', (sender, data) => {
-        if (data.sessionId !== sessionId) return;
-        setTrails(prev => {
-          const prevTrail = prev[data.username] || [];
-          // Only add if new
-          if (
-            prevTrail.length === 0 ||
-            prevTrail[prevTrail.length - 1].latitude !== data.latitude ||
-            prevTrail[prevTrail.length - 1].longitude !== data.longitude
-          ) {
-            return {
-              ...prev,
-              [data.username]: [...prevTrail, { latitude: data.latitude, longitude: data.longitude }]
-            };
-          }
-          return prev;
-        });
-      });
-
-      await connection.start();
-      connectionRef.current = connection;
-    };
-
-    startSignalR();
-
-    return () => {
-      stopped = true;
-      if (connectionRef.current) {
-        connectionRef.current.stop();
+        // Optionally handle error
       }
     };
-  }, [sessionId]);
+    interval = setInterval(pollLocations, 3000);
+    pollLocations(); // initial fetch
+    return () => clearInterval(interval);
+  }, [gameId, roles, username]);
 
   // Poll session to detect if game ended (for all users)
   useEffect(() => {
