@@ -39,6 +39,18 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             except Exception as e:
                 return func.HttpResponse(json.dumps({"error": "Corrupt readyStatus field"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
+            # Add template info if present
+            template = None
+            if session.get("templateId") and session.get("templateCenter") and session.get("templateRadiusMeters"):
+                try:
+                    center = json.loads(session["templateCenter"])
+                except Exception:
+                    center = session["templateCenter"]
+                template = {
+                    "templateId": session["templateId"],
+                    "center": center,
+                    "radiusMeters": session["templateRadiusMeters"]
+                }
             return func.HttpResponse(
                 json.dumps({
                     "users": users,
@@ -47,7 +59,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     "isStarted": session.get("isStarted", False),
                     "currentGameId": session.get("currentGameId"),
                     "roles": json.loads(session.get("roles", "{}")) if session.get("roles") else {},
-                    "painter": session.get("painter", "")
+                    "painter": session.get("painter", ""),
+                    "template": template
                 }),
                 status_code=200,
                 headers={**cors_headers, "Content-Type": "application/json"}
@@ -64,6 +77,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             creator_username = data.get("creator")
             set_ready = data.get("setReady", False)
             leave = data.get("leave", False)
+            set_template = data.get("setTemplate", False)
 
             # Resolve session
             session = None
@@ -88,6 +102,22 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
             users = json.loads(session.get("users", "[]"))
             ready_status = json.loads(session.get("readyStatus", "{}"))
+
+            # === Handle setTemplate (admin only) ===
+            if set_template:
+                # Only admin can set template
+                if username != session.get("creator"):
+                    return func.HttpResponse(json.dumps({"error": "Only admin can set template"}), status_code=403, headers={**cors_headers, "Content-Type": "application/json"})
+                template_id = data.get("templateId")
+                center = data.get("center")
+                radius = data.get("radiusMeters")
+                if not (template_id and center and radius):
+                    return func.HttpResponse(json.dumps({"error": "Missing templateId, center, or radiusMeters"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
+                session["templateId"] = template_id
+                session["templateCenter"] = json.dumps(center) if isinstance(center, dict) else center
+                session["templateRadiusMeters"] = radius
+                session_table.update_entity(session, mode="merge")
+                return func.HttpResponse(json.dumps({"message": "Template set"}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
 
             # === Handle leave request ===
             if leave:

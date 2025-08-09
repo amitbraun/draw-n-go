@@ -14,7 +14,8 @@ const GameScreen = ({ route, navigation }) => {
     painter,
     roles = {},
     username,
-    isAdmin
+    isAdmin,
+    template = null
   } = route.params || {};
 
   // Defensive: check if roles and username are valid
@@ -153,6 +154,9 @@ const GameScreen = ({ route, navigation }) => {
         <Text style={styles.placeholderText}>
           You are: <Text style={{ fontWeight: 'bold' }}>{userRole}</Text>
         </Text>
+        {template && template.templateId && (
+          <Text style={[styles.placeholderText, { color: '#21a4d6', marginTop: 8 }]}>Chosen Shape: <Text style={{ fontWeight: 'bold' }}>{template.templateId.charAt(0).toUpperCase() + template.templateId.slice(1)}</Text></Text>
+        )}
       </View>
       <View style={{ margin: 20 }}>
         <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Players & Roles:</Text>

@@ -22,6 +22,8 @@ const WaitingRoom = ({ route, navigation }) => {
   const [errorMsg, setErrorMsg] = useState("");
   const [startError, setStartError] = useState("");
   const [templateMsg, setTemplateMsg] = useState("");
+  const [template, setTemplate] = useState(null); // { templateId, center, radiusMeters }
+  const [myLocation, setMyLocation] = useState(null); // { latitude, longitude }
 
   const fetchGameEntity = async (gameId) => {
     try {
@@ -36,6 +38,17 @@ const WaitingRoom = ({ route, navigation }) => {
       return null;
     }
   };
+
+  // Get current location (for admin default center)
+  useEffect(() => {
+    if (!isAdmin) return;
+    (async () => {
+      try {
+        const { coords } = await (await import('expo-location')).getCurrentPositionAsync({});
+        setMyLocation({ latitude: coords.latitude, longitude: coords.longitude });
+      } catch (e) {}
+    })();
+  }, [isAdmin]);
 
   const fetchSession = async () => {
     if (!sessionId || !username) {
@@ -77,6 +90,8 @@ const WaitingRoom = ({ route, navigation }) => {
       setCreator(data.creator || "");
       setErrorMsg("");
       setLoading(false);
+      // Always update template from backend for all users
+      setTemplate(data.template || null);
       if (data.isStarted && data.currentGameId) {
         navigation.navigate('Game', {
           sessionId,
@@ -85,7 +100,8 @@ const WaitingRoom = ({ route, navigation }) => {
           roles: data.roles,
           painter: data.painter,
           username,
-          isAdmin
+          isAdmin,
+          template: data.template || null
         });
       }
     } catch (err) {
@@ -96,7 +112,7 @@ const WaitingRoom = ({ route, navigation }) => {
 
   useEffect(() => {
     fetchSession();
-    const interval = setInterval(fetchSession, 3000); // poll every 3 seconds
+    const interval = setInterval(fetchSession, 1000); // poll every 1 second
     return () => clearInterval(interval);
   }, []);
 
@@ -215,11 +231,11 @@ const WaitingRoom = ({ route, navigation }) => {
     }
   };
 
-  // For when admin sets the template
+  // Admin sets the template (calls JoinSession POST with template info)
   const handleTemplateConfirm = async ({ templateId, center, radiusMeters }) => {
     try {
       setTemplateMsg('Saving template…');
-      const res = await fetch('https://draw-n-go.azurewebsites.net/api/SetTemplate', {
+      const res = await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -227,6 +243,7 @@ const WaitingRoom = ({ route, navigation }) => {
         },
         body: JSON.stringify({
           sessionId,
+          setTemplate: true,
           templateId,
           center,
           radiusMeters,
@@ -253,13 +270,17 @@ const WaitingRoom = ({ route, navigation }) => {
         <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
       </View>
 
-      {/* Map visible for everyone */}
+      {/* Template selection (admin) or display (all) */}
       <View style={{ height: 300, marginHorizontal: 12, marginBottom: 12, borderRadius: 12, overflow: 'hidden' }}>
         <AdminTemplateMap
-          onConfirm={isAdmin ? handleTemplateConfirm : undefined} // only admins can save
+          onConfirm={isAdmin ? handleTemplateConfirm : undefined}
           initialRadiusMeters={120}
+          initialCenter={isAdmin && myLocation ? myLocation : undefined}
+          disabled={!isAdmin}
+          template={template}
+          hideControls={!isAdmin}
         />
-        {templateMsg ? (
+        {isAdmin && templateMsg ? (
           <View style={{ position: 'absolute', bottom: 8, left: 8, right: 8, alignItems: 'center' }}>
             <Text style={{ backgroundColor: 'rgba(255,255,255,0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
               {templateMsg}

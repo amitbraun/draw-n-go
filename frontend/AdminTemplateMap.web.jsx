@@ -5,14 +5,56 @@ import Constants from "expo-constants";
 export default function AdminTemplateMap({
   initialRadiusMeters = 120,
   onConfirm,
+  template,
+  hideControls = false,
+  initialCenter
 }) {
   const [loading, setLoading] = useState(true);
   const [myRegion, setMyRegion] = useState(null);
 
+  // If hideControls, always use template prop for display
   const [templateId, setTemplateId] = useState(null); // 'square' | 'triangle'
   const [center, setCenter] = useState(null);
   const [radius, setRadius] = useState(initialRadiusMeters);
   const [locked, setLocked] = useState(false);
+
+  // Sync state with template prop for non-admins
+  useEffect(() => {
+    if (hideControls && template) {
+      setTemplateId(template.templateId || null);
+      setCenter(template.center || null);
+      setRadius(template.radiusMeters || initialRadiusMeters);
+      setLocked(true);
+      // Center map on template center
+      if (template.center && template.center.lat && template.center.lng) {
+        setMyRegion({ lat: template.center.lat, lng: template.center.lng });
+      }
+    }
+    if (hideControls && !template) {
+      setTemplateId(null);
+      setCenter(null);
+      setRadius(initialRadiusMeters);
+      setLocked(true);
+    }
+  }, [hideControls, template, initialRadiusMeters]);
+
+  // For admin, center map on template center if set, else use initialCenter
+  useEffect(() => {
+    if (!hideControls) {
+      if (center && center.lat && center.lng) {
+        setMyRegion({ lat: center.lat, lng: center.lng });
+      } else if (initialCenter) {
+        setMyRegion({ lat: initialCenter.latitude, lng: initialCenter.longitude });
+      }
+    }
+  }, [hideControls, center, initialCenter]);
+
+  // For admin, set initial center if provided
+  useEffect(() => {
+    if (!hideControls && initialCenter) {
+      setCenter({ lat: initialCenter.latitude, lng: initialCenter.longitude });
+    }
+  }, [hideControls, initialCenter]);
 
   const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY;
 
@@ -43,6 +85,32 @@ export default function AdminTemplateMap({
       const left = { lat: lat - dLat, lng: lng - dLng };
       const right = { lat: lat - dLat, lng: lng + dLng };
       return [top, right, left];
+    }
+    if (templateId === "circle") {
+      // Approximate circle with polygon (32 points)
+      const points = [];
+      for (let i = 0; i < 32; i++) {
+        const angle = (2 * Math.PI * i) / 32;
+        const dLatC = dLat * Math.cos(angle);
+        const dLngC = dLng * Math.sin(angle);
+        points.push({ lat: lat + dLatC, lng: lng + dLngC });
+      }
+      return points;
+    }
+    if (templateId === "star") {
+      // 5-pointed star, alternating outer/inner radius
+      const points = [];
+      const numPoints = 10;
+      const outerR = 1;
+      const innerR = 0.4;
+      for (let i = 0; i < numPoints; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const angle = (Math.PI / 2) + (2 * Math.PI * i) / numPoints;
+        const dLatS = dLat * r * Math.cos(angle);
+        const dLngS = dLng * r * Math.sin(angle);
+        points.push({ lat: lat + dLatS, lng: lng + dLngS });
+      }
+      return points;
     }
     return [];
   }, [center, radius, templateId]);
@@ -108,39 +176,31 @@ export default function AdminTemplateMap({
 
   return (
     <div style={{ height: 300, position: "relative" }}>
-      {/* Template picker */}
-      <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 8 }}>
-        <button
-          disabled={locked}
-          onClick={() => setTemplateId("square")}
-          style={{
-            background: templateId === "square" ? "#21a4d6" : "#fff",
-            color: templateId === "square" ? "#fff" : "#21a4d6",
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid #21a4d6",
-            fontWeight: 600,
-            cursor: locked ? "not-allowed" : "pointer",
-          }}
-        >
-          Square
-        </button>
-        <button
-          disabled={locked}
-          onClick={() => setTemplateId("triangle")}
-          style={{
-            background: templateId === "triangle" ? "#21a4d6" : "#fff",
-            color: templateId === "triangle" ? "#fff" : "#21a4d6",
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid #21a4d6",
-            fontWeight: 600,
-            cursor: locked ? "not-allowed" : "pointer",
-          }}
-        >
-          Triangle
-        </button>
-      </div>
+      {/* Only show controls if not hideControls (admin) */}
+      {!hideControls && (
+        <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 8 }}>
+          <select
+            disabled={locked}
+            value={templateId || ''}
+            onChange={e => setTemplateId(e.target.value)}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #21a4d6",
+              fontWeight: 600,
+              color: "#21a4d6",
+              background: "#fff",
+              minWidth: 120
+            }}
+          >
+            <option value="" disabled>Select shape…</option>
+            <option value="square">Square</option>
+            <option value="triangle">Triangle</option>
+            <option value="circle">Circle</option>
+            <option value="star">Star</option>
+          </select>
+        </div>
+      )}
 
       <GoogleMap
         mapContainerStyle={{ height: "100%", width: "100%" }}
@@ -148,17 +208,25 @@ export default function AdminTemplateMap({
         zoom={16}
         options={{ disableDefaultUI: true, draggable: !locked }}
         onClick={(e) => {
-          if (!locked) {
+          if (!locked && !hideControls) {
             setCenter({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+            setMyRegion({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+          }
+        }}
+        onCenterChanged={() => {
+          // For admin, allow moving map freely
+          if (!hideControls) {
+            const map = window.google && window.google.maps && window.google.maps.Map ? window.google.maps.Map : null;
+            // No-op: react-google-maps handles this
           }
         }}
       >
         {center && (
           <Marker
             position={center}
-            draggable={!locked}
+            draggable={!locked && !hideControls}
             onDragEnd={(e) => {
-              if (!locked) {
+              if (!locked && !hideControls) {
                 setCenter({ lat: e.latLng.lat(), lng: e.latLng.lng() });
               }
             }}
@@ -177,78 +245,80 @@ export default function AdminTemplateMap({
         )}
       </GoogleMap>
 
-      {/* Bottom controls */}
-      <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
-          <button
-            disabled={locked}
-            onClick={() => bumpRadius(1 / 1.15)}
-            style={{
-              background: locked ? "#ccc" : "#fff",
-              border: "1px solid #21a4d6",
-              padding: "10px 14px",
-              borderRadius: 8,
-              color: locked ? "#777" : "#21a4d6",
-              fontWeight: 700,
-              cursor: locked ? "not-allowed" : "pointer",
-            }}
-          >
-            − Size
-          </button>
-          <button
-            disabled={locked}
-            onClick={() => bumpRadius(1.15)}
-            style={{
-              background: locked ? "#ccc" : "#fff",
-              border: "1px solid #21a4d6",
-              padding: "10px 14px",
-              borderRadius: 8,
-              color: locked ? "#777" : "#21a4d6",
-              fontWeight: 700,
-              cursor: locked ? "not-allowed" : "pointer",
-            }}
-          >
-            + Size
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: 12 }}>
-          {!locked ? (
+      {/* Only show bottom controls if not hideControls (admin) */}
+      {!hideControls && (
+        <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
             <button
-              disabled={!templateId}
-              onClick={handleSet}
+              disabled={locked}
+              onClick={() => bumpRadius(1 / 1.15)}
               style={{
-                background: templateId ? "#20b265" : "#ccc",
-                color: "#fff",
-                padding: "12px 18px",
-                borderRadius: 10,
+                background: locked ? "#ccc" : "#fff",
+                border: "1px solid #21a4d6",
+                padding: "10px 14px",
+                borderRadius: 8,
+                color: locked ? "#777" : "#21a4d6",
                 fontWeight: 700,
-                cursor: templateId ? "pointer" : "not-allowed",
+                cursor: locked ? "not-allowed" : "pointer",
               }}
             >
-              Set
+              − Size
             </button>
-          ) : (
             <button
-              onClick={handleEdit}
+              disabled={locked}
+              onClick={() => bumpRadius(1.15)}
               style={{
-                background: "#21a4d6",
-                color: "#fff",
-                padding: "12px 18px",
-                borderRadius: 10,
+                background: locked ? "#ccc" : "#fff",
+                border: "1px solid #21a4d6",
+                padding: "10px 14px",
+                borderRadius: 8,
+                color: locked ? "#777" : "#21a4d6",
                 fontWeight: 700,
-                cursor: "pointer",
+                cursor: locked ? "not-allowed" : "pointer",
               }}
             >
-              Edit
+              + Size
             </button>
-          )}
-        </div>
+          </div>
 
-        <span style={{ marginTop: 10, background: "rgba(255,255,255,0.9)", padding: "6px 10px", borderRadius: 8 }}>
-          {templateId ? `Template: ${templateId} • Radius: ${Math.round(radius)}m` : "Choose a template"}
-        </span>
-      </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            {!locked ? (
+              <button
+                disabled={!templateId}
+                onClick={handleSet}
+                style={{
+                  background: templateId ? "#20b265" : "#ccc",
+                  color: "#fff",
+                  padding: "12px 18px",
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  cursor: templateId ? "pointer" : "not-allowed",
+                }}
+              >
+                Set
+              </button>
+            ) : (
+              <button
+                onClick={handleEdit}
+                style={{
+                  background: "#21a4d6",
+                  color: "#fff",
+                  padding: "12px 18px",
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Edit
+              </button>
+            )}
+          </div>
+
+          <span style={{ marginTop: 10, background: "rgba(255,255,255,0.9)", padding: "6px 10px", borderRadius: 8 }}>
+            {templateId ? `Template: ${templateId} • Radius: ${Math.round(radius)}m` : "Choose a template"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
