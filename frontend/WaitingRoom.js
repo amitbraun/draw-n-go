@@ -11,6 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 import AdminTemplateMap from './AdminTemplateMap';
+import SharedHeader from './SharedHeader';
 
 const WaitingRoom = ({ route, navigation }) => {
   const { sessionId, username, isAdmin } = route.params;
@@ -265,6 +266,7 @@ const WaitingRoom = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <SharedHeader navigation={navigation} />
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Waiting Room</Text>
         <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>

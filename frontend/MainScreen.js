@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import styles from './styles';
+import SharedHeader from './SharedHeader'; // <-- Add this import
 
 const MainScreen = ({ navigation, route }) => {
   const username = route.params?.username;
@@ -98,6 +99,7 @@ const MainScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <SharedHeader navigation={navigation} /> {/* <-- Add this line */}
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Main Screen</Text>
         <Text style={styles.placeholderText}>Your location-based features will appear here.</Text>
