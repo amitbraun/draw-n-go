@@ -1,27 +1,32 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, SafeAreaView, TouchableOpacity } from 'react-native';
 import * as Location from 'expo-location';
-import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 import SharedHeader from './SharedHeader';
 import PainterMap from './PainterMap.web.jsx';
 
 const FUNCTION_APP_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
 
-const GameScreen = ({ route, navigation }) => {
-  const {
-    sessionId,
-    gameId,
-    users = [],
-    painter,
-    roles = {},
-    username,
-    isAdmin,
-    template = null,
-    gameStartTime // Pass this from WaitingRoom/Game start if available
-  } = route.params || {};
+const colorPalette = [
+  '#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+  '#008080', '#e6beff', '#9A6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080'
+];
+const hashColor = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return colorPalette[Math.abs(hash) % colorPalette.length];
+};
 
-  const userRole = roles && username && roles[username] ? roles[username] : "Unknown";
+const GameScreen = ({ route, navigation }) => {
+  const { sessionId, gameId, users = [], roles = {}, username, isAdmin, template = null, gameStartTime } = route.params || {};
+
+  // Identify painter user
+  const painterUser = useMemo(() => {
+    try {
+      return Object.keys(roles || {}).find(u => roles[u] === 'Painter');
+    } catch { return undefined; }
+  }, [roles]);
+
   if (!roles || !username) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -32,90 +37,113 @@ const GameScreen = ({ route, navigation }) => {
     );
   }
 
-  const isPainter = roles[username] === "Painter";
-  const isBrush = roles[username] === "Brush";
-  const [location, setLocation] = useState(null);
-  const [trails, setTrails] = useState({});
-  const [ending, setEnding] = useState(false);
+  const isPainter = roles[username] === 'Painter';
+  const isBrush = roles[username] === 'Brush';
+
   const [timer, setTimer] = useState(0);
   const timerRef = useRef(null);
 
-  // Timer logic: count up from game start
+  const [trails, setTrails] = useState({}); // { user: [{lat,lng},...] }
+  const [latestPositions, setLatestPositions] = useState({}); // { user: { latitude, longitude } }
+  const [ending, setEnding] = useState(false);
+
+  // Deterministic colors for users (no color for painter)
+  const playerColors = useMemo(() => {
+    const out = {};
+    users.forEach(u => { if (roles[u] !== 'Painter') out[u] = hashColor(u); });
+    return out;
+  }, [users, roles]);
+
+  // Timer: elapsed since gameStartTime or mount
   useEffect(() => {
-    // Use gameStartTime from props if available, else fallback to Date.now() at mount
     const start = gameStartTime || Date.now();
-    timerRef.current = setInterval(() => {
-      setTimer(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
+    timerRef.current = setInterval(() => setTimer(Math.floor((Date.now() - start) / 1000)), 1000);
     return () => clearInterval(timerRef.current);
   }, [gameStartTime]);
 
-  // Only Brushes send their location periodically
+  // Brushes send location every 3s
   useEffect(() => {
     if (!isBrush) return;
     let interval;
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords);
-      // sendLocation(loc.coords); // If needed for backend
-      interval = setInterval(async () => {
+      const sendOnce = async () => {
         const loc = await Location.getCurrentPositionAsync({});
-        setLocation(loc.coords);
-        // sendLocation(loc.coords); // If needed for backend
-      }, 3000);
+        try {
+          await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username,
+              gameId,
+              location: {
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+                timestamp: Date.now(),
+              },
+            }),
+          });
+        } catch {}
+      };
+      await sendOnce();
+      interval = setInterval(sendOnce, 1000);
     })();
     return () => interval && clearInterval(interval);
-  }, [roles, username]);
+  }, [isBrush, username, gameId]);
 
-  // Only the Painter polls for all locations
+  // Painter polls locations from Distances and builds local trails
   useEffect(() => {
     if (!isPainter) return;
     let interval;
-    const pollLocations = async () => {
+    const poll = async () => {
       try {
-        const res = await fetch(
-          `${FUNCTION_APP_ENDPOINT}/api/getLocations?gameId=${gameId}`
-        );
-        if (res.ok) {
-          const locations = await res.json();
-          const newTrails = {};
-          locations.forEach(loc => {
-            newTrails[loc.username] = [
-              ...(trails[loc.username] || []),
-              { latitude: loc.latitude, longitude: loc.longitude }
-            ];
+        const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/getLocations?gameId=${gameId}`);
+        if (!res.ok) return;
+        const data = await res.json(); // [{username, latitude, longitude, totalDistance, timestamp}]
+        // latest positions
+        const latest = {};
+        data.forEach(d => {
+          if (d.latitude != null && d.longitude != null) {
+            latest[d.username] = { latitude: d.latitude, longitude: d.longitude };
+          }
+        });
+        setLatestPositions(latest);
+        // trails: append new point if changed
+        setTrails(prev => {
+          const next = { ...prev };
+          data.forEach(d => {
+            if (d.latitude == null || d.longitude == null) return;
+            const arr = next[d.username] || [];
+            const last = arr[arr.length - 1];
+            if (!last || last.latitude !== d.latitude || last.longitude !== d.longitude) {
+              next[d.username] = [...arr, { latitude: d.latitude, longitude: d.longitude }];
+            }
           });
-          setTrails(newTrails);
-        }
-      } catch (e) {}
+          return next;
+        });
+      } catch {}
     };
-    interval = setInterval(pollLocations, 3000);
-    pollLocations();
+    poll();
+    interval = setInterval(poll, 1000);
     return () => clearInterval(interval);
-  }, [gameId, roles, username]);
+  }, [isPainter, gameId]);
 
-  // Poll session to detect if game ended (for all users)
+  // Poll session end
   useEffect(() => {
     if (ending) return;
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(
-          `${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}`
-        );
+        const response = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}`);
         if (response.ok) {
           const data = await response.json();
-          if (!data.isStarted) {
-            navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
-          }
+          if (!data.isStarted) navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
         }
-      } catch (e) {}
-    }, 3000);
+      } catch {}
+    }, 1000);
     return () => clearInterval(interval);
   }, [ending, sessionId, username, isAdmin, navigation]);
 
-  // Admin ends the game
   const handleEndGame = async () => {
     setEnding(true);
     try {
@@ -125,65 +153,64 @@ const GameScreen = ({ route, navigation }) => {
         body: JSON.stringify({ sessionId, endGame: true }),
       });
       navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
-    } catch (err) {
+    } catch {
       setEnding(false);
     }
   };
 
-  // What to show
-  const visibleUsers = isPainter ? users : [username];
-
+  // Full screen map with overlays
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { flex: 1 }]}>      
       <SharedHeader navigation={navigation} />
-      <View style={styles.middlePlaceholder}>
-        <Text style={styles.title}>Game Screen</Text>
-        <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
-        <Text style={styles.placeholderText}>
-          You are: <Text style={{ fontWeight: 'bold' }}>{userRole}</Text>
-        </Text>
-        {template && template.templateId && (
-          <Text style={[styles.placeholderText, { color: '#21a4d6', marginTop: 8 }]}>
-            Chosen Shape: <Text style={{ fontWeight: 'bold' }}>
-              {template.templateId.charAt(0).toUpperCase() + template.templateId.slice(1)}
-            </Text>
-          </Text>
+      <View style={{ flex: 1, position: 'relative' }}>
+        {isPainter && template ? (
+          <PainterMap
+            template={template}
+            height={"100%"}
+            trails={trails}
+            latestPositions={latestPositions}
+            playerColors={playerColors}
+            disableInteractions={true}
+          />
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600' }}>Game in progress…</Text>
+            <Text style={{ marginTop: 6, color: '#666' }}>Please wait until the game ends.</Text>
+          </View>
+        )}
+        {/* Top-left: players and roles with colors (no color dot for painter) */}
+        {isPainter && (
+          <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: 'rgba(255,255,255,0.92)', padding: 10, borderRadius: 8, maxWidth: 260 }}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>Players</Text>
+            {users.map(u => (
+              <View key={u} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                {roles[u] !== 'Painter' && (
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: playerColors[u], marginRight: 6 }} />
+                )}
+                <Text style={{ fontWeight: u === username ? 'bold' : 'normal' }}>{u} - {roles[u]}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {/* Top-right: elapsed time only */}
+        <View style={{ position: 'absolute', top: 12, right: 12, alignItems: 'flex-end' }}>
+          <View style={{ backgroundColor: 'rgba(255,255,255,0.92)', padding: 8, borderRadius: 8 }}>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#f88a3b' }}>Elapsed time: {timer}s</Text>
+          </View>
+        </View>
+        {/* Bottom-left: end button (if admin or painter) */}
+        {(isAdmin || isPainter) && (
+          <View style={{ position: 'absolute', bottom: 16, left: 12 }}>
+            <TouchableOpacity
+              style={[styles.button, { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#d9534f', minWidth: 120 }]}
+              onPress={handleEndGame}
+              disabled={ending}
+            >
+              <Text style={[styles.buttonText, { fontSize: 14 }]}>End Game</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
-      <View style={{ alignItems: 'center', marginBottom: 16 }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#f88a3b' }}>
-          Timer: {timer}s
-        </Text>
-      </View>
-      {/* Painter sees the map and timer, Brush sees only the timer */}
-      {isPainter && template && (
-        <PainterMap template={template} />
-      )}
-      {/* Hide all players location and trails box */}
-      {isPainter && (
-        <View style={{ margin: 20 }}>
-          <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Players & Roles:</Text>
-          <FlatList
-            data={users}
-            keyExtractor={item => item}
-            renderItem={({ item }) => (
-              <Text style={item === username ? { fontWeight: 'bold' } : {}}>
-                {item} - {roles[item]}
-                {item === users[0] ? ' 👑' : ''}
-              </Text>
-            )}
-          />
-        </View>
-      )}
-      {isAdmin && (
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: '#d9534f', alignSelf: 'center', marginBottom: 20 }]}
-          onPress={handleEndGame}
-          disabled={ending}
-        >
-          <Text style={styles.buttonText}>End Game</Text>
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 };

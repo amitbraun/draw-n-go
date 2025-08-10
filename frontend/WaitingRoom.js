@@ -265,15 +265,9 @@ const WaitingRoom = ({ route, navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <SharedHeader navigation={navigation} />
-      <View style={styles.middlePlaceholder}>
-        <Text style={styles.title}>Waiting Room</Text>
-        <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
-      </View>
-
-      {/* Template selection (admin) or display (all) */}
-      <View style={{ height: 300, marginHorizontal: 12, marginBottom: 12, borderRadius: 12, overflow: 'hidden' }}>
+    <SafeAreaView style={[styles.safeArea, { flex: 1 }]}>      
+      {/* Full-screen map */}
+      <View style={{ flex: 1, position: 'relative' }}>
         <AdminTemplateMap
           onConfirm={isAdmin ? handleTemplateConfirm : undefined}
           initialRadiusMeters={120}
@@ -281,82 +275,67 @@ const WaitingRoom = ({ route, navigation }) => {
           disabled={!isAdmin}
           template={template}
           hideControls={!isAdmin}
+          height={'100%'}
         />
-        {isAdmin && templateMsg ? (
-          <View style={{ position: 'absolute', bottom: 8, left: 8, right: 8, alignItems: 'center' }}>
-            <Text style={{ backgroundColor: 'rgba(255,255,255,0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-              {templateMsg}
-            </Text>
-          </View>
-        ) : null}
-      </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#21a4d6" />
-      ) : errorMsg ? (
-        <View style={{ padding: 16 }}>
-          <Text style={{ color: 'red', textAlign: 'center' }}>{errorMsg}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={users}
-          keyExtractor={(item) => item}
-          renderItem={({ item }) => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
-              <Text
-                style={{
-                  ...styles.dropdownItem,
-                  fontWeight: item === username ? 'bold' : 'normal',
-                  color: readyStatus[item] ? 'green' : '#21a4d6'
-                }}
-              >
-                {item}
-                {item === creator && ' 👑'}
-                {item === username && ' (you)'}
-              </Text>
-              <Text style={{ marginLeft: 8 }}>
-                {readyStatus[item] ? '✅ Ready' : '⏳ Not Ready'}
-              </Text>
-            </View>
+        {/* Overlay: top-left players list with ready status */}
+        <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: 'rgba(255,255,255,0.92)', padding: 10, borderRadius: 10, maxWidth: '80%' }}>
+          <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>Waiting Room • Session: {sessionId}</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#21a4d6" />
+          ) : errorMsg ? (
+            <Text style={{ color: 'red' }}>{errorMsg}</Text>
+          ) : (
+            <FlatList
+              data={users}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
+                  <Text style={{ fontWeight: item === username ? '700' : '400', color: item === creator ? '#f39c12' : '#333' }}>
+                    {item}{item === creator ? ' 👑' : ''}{item === username ? ' (you)' : ''}
+                  </Text>
+                  <Text style={{ marginLeft: 8 }}>
+                    {readyStatus[item] ? '✅ Ready' : '⏳ Not Ready'}
+                  </Text>
+                </View>
+              )}
+            />
           )}
-        />
-      )}
+        </View>
 
-      {startError !== "" && (
-        <Text style={styles.error}>{startError}</Text>
-      )}
+        {/* Overlay: bottom-left smaller actions */}
+        <View style={{ position: 'absolute', bottom: 16, left: 12, alignItems: 'flex-start', gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.button, { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: readyStatus[username] ? '#20b265' : '#21a4d6', minWidth: 120 }]}
+            onPress={handleToggleReady}
+          >
+            <Text style={[styles.buttonText, { fontSize: 14 }]}>
+              {readyStatus[username] ? 'Ready ✅' : "I'm Ready"}
+            </Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[
-          styles.button,
-          { backgroundColor: readyStatus[username] ? '#20b265' : '#21a4d6' }
-        ]}
-        onPress={handleToggleReady}
-      >
-        <Text style={styles.buttonText}>
-          {readyStatus[username] ? "Ready ✅" : "I'm Ready"}
-        </Text>
-      </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.button, { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: allReady ? '#20b265' : '#cccccc', minWidth: 120 }]}
+              onPress={handleStartGame}
+              disabled={!allReady}
+            >
+              <Text style={[styles.buttonText, { fontSize: 14 }]}>Start</Text>
+            </TouchableOpacity>
+          )}
 
-      {isAdmin && (
-        <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: allReady ? '#20b265' : '#cccccc' }
-          ]}
-          onPress={handleStartGame}
-          disabled={!allReady}
-        >
-          <Text style={styles.buttonText}>Start Game</Text>
-        </TouchableOpacity>
-      )}
+          <TouchableOpacity
+            style={[styles.button, { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#d9534f', minWidth: 120 }]}
+            onPress={handleLeave}
+          >
+            <Text style={[styles.buttonText, { fontSize: 14 }]}>{isAdmin ? 'End Session' : 'Leave'}</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: '#d9534f' }]}
-        onPress={handleLeave}
-      >
-        <Text style={styles.buttonText}>{isAdmin ? 'End Session' : 'Leave Session'}</Text>
-      </TouchableOpacity>
+          {startError !== '' && (
+            <Text style={[styles.error, { marginTop: 6 }]}>{startError}</Text>
+          )}
+        </View>
+      </View>
     </SafeAreaView>
   );
 };

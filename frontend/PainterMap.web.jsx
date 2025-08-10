@@ -1,9 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { GoogleMap, Marker, Polygon, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import Constants from "expo-constants";
 
 export default function PainterMap({
   template, // { templateId, center, radiusMeters }
+  height = 300,
+  trails = {}, // { username: [{latitude, longitude}, ...] }
+  latestPositions = {}, // { username: { latitude, longitude } }
+  playerColors = {}, // { username: '#rrggbb' }
+  disableInteractions = true,
 }) {
   const [myRegion, setMyRegion] = useState(null);
 
@@ -77,7 +82,7 @@ export default function PainterMap({
 
   if (!isLoaded) {
     return (
-      <div style={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <span>Loading map…</span>
       </div>
     );
@@ -85,7 +90,7 @@ export default function PainterMap({
 
   if (!myRegion || !center) {
     return (
-      <div style={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
         <span>
           Location unavailable. Check site permission.
         </span>
@@ -93,13 +98,15 @@ export default function PainterMap({
     );
   }
 
+  const googleSymbolCircle = (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.SymbolPath && window.google.maps.SymbolPath.CIRCLE) || null;
+
   return (
-    <div style={{ height: 300, position: "relative" }}>
+    <div style={{ height, position: "relative" }}>
       <GoogleMap
         mapContainerStyle={{ height: "100%", width: "100%" }}
         center={myRegion}
         zoom={16}
-        options={{ disableDefaultUI: true, draggable: false }}
+        options={{ disableDefaultUI: true, draggable: !disableInteractions }}
       >
         {center && (
           <Marker
@@ -118,6 +125,33 @@ export default function PainterMap({
             }}
           />
         )}
+        {/* Trails */}
+        {Object.entries(trails).map(([user, points]) => (
+          points && points.length > 1 ? (
+            <Polyline
+              key={`trail-${user}`}
+              path={points.map(p => ({ lat: p.latitude, lng: p.longitude }))}
+              options={{ strokeColor: playerColors[user] || "#ff6600", strokeWeight: 4, strokeOpacity: 0.9 }}
+            />
+          ) : null
+        ))}
+        {/* Latest markers */}
+        {Object.entries(latestPositions).map(([user, pos]) => (
+          pos && pos.latitude != null && pos.longitude != null ? (
+            <Marker
+              key={`marker-${user}`}
+              position={{ lat: pos.latitude, lng: pos.longitude }}
+              icon={googleSymbolCircle ? {
+                path: googleSymbolCircle,
+                scale: 6,
+                fillColor: playerColors[user] || "#ff6600",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2,
+              } : undefined}
+            />
+          ) : null
+        ))}
       </GoogleMap>
       <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(255,255,255,0.9)", padding: "6px 10px", borderRadius: 8 }}>
         {templateId ? `Template: ${templateId} • Radius: ${Math.round(radius)}m` : "No template"}

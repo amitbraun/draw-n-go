@@ -7,7 +7,8 @@ export default function AdminTemplateMap({
   onConfirm,
   template,
   hideControls = false,
-  initialCenter
+  initialCenter,
+  height = '100%'
 }) {
   const [loading, setLoading] = useState(true);
   const [myRegion, setMyRegion] = useState(null);
@@ -158,7 +159,7 @@ export default function AdminTemplateMap({
 
   if (!isLoaded || loading) {
     return (
-      <div style={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ height: height, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <span>Loading map…</span>
       </div>
     );
@@ -166,7 +167,7 @@ export default function AdminTemplateMap({
 
   if (!myRegion || !center) {
     return (
-      <div style={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ height: height, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
         <span>
           Location unavailable. Check site permission.
         </span>
@@ -175,22 +176,22 @@ export default function AdminTemplateMap({
   }
 
   return (
-    <div style={{ height: 300, position: "relative" }}>
-      {/* Only show controls if not hideControls (admin) */}
+    <div style={{ height: height, position: "relative" }}>
+      {/* Top-right: template dropdown with size and set/edit stacked below */}
       {!hideControls && (
-        <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 8 }}>
+        <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
           <select
             disabled={locked}
             value={templateId || ''}
             onChange={e => setTemplateId(e.target.value)}
             style={{
-              padding: "8px 12px",
+              padding: "6px 10px",
               borderRadius: 8,
               border: "1px solid #21a4d6",
               fontWeight: 600,
               color: "#21a4d6",
               background: "#fff",
-              minWidth: 120
+              minWidth: 140
             }}
           >
             <option value="" disabled>Select shape…</option>
@@ -199,6 +200,76 @@ export default function AdminTemplateMap({
             <option value="circle">Circle</option>
             <option value="star">Star</option>
           </select>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              disabled={locked}
+              onClick={() => bumpRadius(1 / 1.15)}
+              style={{
+                background: locked ? "#ccc" : "#fff",
+                border: "1px solid #21a4d6",
+                padding: "6px 10px",
+                borderRadius: 8,
+                color: locked ? "#777" : "#21a4d6",
+                fontWeight: 700,
+                cursor: locked ? "not-allowed" : "pointer",
+              }}
+            >
+              − Size
+            </button>
+            <button
+              disabled={locked}
+              onClick={() => bumpRadius(1.15)}
+              style={{
+                background: locked ? "#ccc" : "#fff",
+                border: "1px solid #21a4d6",
+                padding: "6px 10px",
+                borderRadius: 8,
+                color: locked ? "#777" : "#21a4d6",
+                fontWeight: 700,
+                cursor: locked ? "not-allowed" : "pointer",
+              }}
+            >
+              + Size
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!locked ? (
+              <button
+                disabled={!templateId}
+                onClick={handleSet}
+                style={{
+                  background: templateId ? "#20b265" : "#ccc",
+                  color: "#fff",
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  fontWeight: 700,
+                  cursor: templateId ? "pointer" : "not-allowed",
+                }}
+              >
+                Set
+              </button>
+            ) : (
+              <button
+                onClick={handleEdit}
+                style={{
+                  background: "#21a4d6",
+                  color: "#fff",
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Edit
+              </button>
+            )}
+          </div>
+
+          <span style={{ fontSize: 12, background: "rgba(255,255,255,0.9)", padding: "4px 8px", borderRadius: 8 }}>
+            {templateId ? `Template: ${templateId} • Radius: ${Math.round(radius)}m` : "Choose a template"}
+          </span>
         </div>
       )}
 
@@ -244,81 +315,6 @@ export default function AdminTemplateMap({
           />
         )}
       </GoogleMap>
-
-      {/* Only show bottom controls if not hideControls (admin) */}
-      {!hideControls && (
-        <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
-            <button
-              disabled={locked}
-              onClick={() => bumpRadius(1 / 1.15)}
-              style={{
-                background: locked ? "#ccc" : "#fff",
-                border: "1px solid #21a4d6",
-                padding: "10px 14px",
-                borderRadius: 8,
-                color: locked ? "#777" : "#21a4d6",
-                fontWeight: 700,
-                cursor: locked ? "not-allowed" : "pointer",
-              }}
-            >
-              − Size
-            </button>
-            <button
-              disabled={locked}
-              onClick={() => bumpRadius(1.15)}
-              style={{
-                background: locked ? "#ccc" : "#fff",
-                border: "1px solid #21a4d6",
-                padding: "10px 14px",
-                borderRadius: 8,
-                color: locked ? "#777" : "#21a4d6",
-                fontWeight: 700,
-                cursor: locked ? "not-allowed" : "pointer",
-              }}
-            >
-              + Size
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 12 }}>
-            {!locked ? (
-              <button
-                disabled={!templateId}
-                onClick={handleSet}
-                style={{
-                  background: templateId ? "#20b265" : "#ccc",
-                  color: "#fff",
-                  padding: "12px 18px",
-                  borderRadius: 10,
-                  fontWeight: 700,
-                  cursor: templateId ? "pointer" : "not-allowed",
-                }}
-              >
-                Set
-              </button>
-            ) : (
-              <button
-                onClick={handleEdit}
-                style={{
-                  background: "#21a4d6",
-                  color: "#fff",
-                  padding: "12px 18px",
-                  borderRadius: 10,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Edit
-              </button>
-            )}
-          </div>
-
-          <span style={{ marginTop: 10, background: "rgba(255,255,255,0.9)", padding: "6px 10px", borderRadius: 8 }}>
-            {templateId ? `Template: ${templateId} • Radius: ${Math.round(radius)}m` : "Choose a template"}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
