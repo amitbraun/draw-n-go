@@ -3,6 +3,8 @@ import { View, Text, SafeAreaView, TouchableOpacity, FlatList } from 'react-nati
 import * as Location from 'expo-location';
 import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
+import SharedHeader from './SharedHeader';
+import PainterMap from './PainterMap.web.jsx';
 
 const FUNCTION_APP_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
 
@@ -15,13 +17,11 @@ const GameScreen = ({ route, navigation }) => {
     roles = {},
     username,
     isAdmin,
-    template = null
+    template = null,
+    gameStartTime // Pass this from WaitingRoom/Game start if available
   } = route.params || {};
 
-  // Defensive: check if roles and username are valid
   const userRole = roles && username && roles[username] ? roles[username] : "Unknown";
-
-  // Optionally, show a warning if roles or username are missing
   if (!roles || !username) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -33,46 +33,37 @@ const GameScreen = ({ route, navigation }) => {
   }
 
   const isPainter = roles[username] === "Painter";
+  const isBrush = roles[username] === "Brush";
   const [location, setLocation] = useState(null);
-  const [trails, setTrails] = useState({}); // { username: [ {latitude, longitude}, ... ] }
+  const [trails, setTrails] = useState({});
   const [ending, setEnding] = useState(false);
-  const connectionRef = useRef(null);
+  const [timer, setTimer] = useState(0);
+  const timerRef = useRef(null);
 
-  // Helper to send location to backend (only for Brushes)
-  const sendLocation = async (coords) => {
-    try {
-      await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          gameId,
-          username,
-          location: {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            timestamp: Date.now(),
-          },
-        }),
-      });
-    } catch (err) {
-      // Optionally handle error
-    }
-  };
+  // Timer logic: count up from game start
+  useEffect(() => {
+    // Use gameStartTime from props if available, else fallback to Date.now() at mount
+    const start = gameStartTime || Date.now();
+    timerRef.current = setInterval(() => {
+      setTimer(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [gameStartTime]);
 
   // Only Brushes send their location periodically
   useEffect(() => {
-    if (roles[username] !== 'Brush') return;
+    if (!isBrush) return;
     let interval;
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc.coords);
-      sendLocation(loc.coords);
+      // sendLocation(loc.coords); // If needed for backend
       interval = setInterval(async () => {
         const loc = await Location.getCurrentPositionAsync({});
         setLocation(loc.coords);
-        sendLocation(loc.coords);
+        // sendLocation(loc.coords); // If needed for backend
       }, 3000);
     })();
     return () => interval && clearInterval(interval);
@@ -80,7 +71,7 @@ const GameScreen = ({ route, navigation }) => {
 
   // Only the Painter polls for all locations
   useEffect(() => {
-    if (roles[username] !== 'Painter') return;
+    if (!isPainter) return;
     let interval;
     const pollLocations = async () => {
       try {
@@ -89,7 +80,6 @@ const GameScreen = ({ route, navigation }) => {
         );
         if (res.ok) {
           const locations = await res.json();
-          // Convert to trails format: { username: [{latitude, longitude}, ...] }
           const newTrails = {};
           locations.forEach(loc => {
             newTrails[loc.username] = [
@@ -99,12 +89,10 @@ const GameScreen = ({ route, navigation }) => {
           });
           setTrails(newTrails);
         }
-      } catch (e) {
-        // Optionally handle error
-      }
+      } catch (e) {}
     };
     interval = setInterval(pollLocations, 3000);
-    pollLocations(); // initial fetch
+    pollLocations();
     return () => clearInterval(interval);
   }, [gameId, roles, username]);
 
@@ -136,7 +124,6 @@ const GameScreen = ({ route, navigation }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, endGame: true }),
       });
-      // Optionally, navigate admin immediately
       navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
     } catch (err) {
       setEnding(false);
@@ -148,6 +135,7 @@ const GameScreen = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <SharedHeader navigation={navigation} />
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Game Screen</Text>
         <Text style={styles.placeholderText}>Session ID: {sessionId}</Text>
@@ -155,53 +143,38 @@ const GameScreen = ({ route, navigation }) => {
           You are: <Text style={{ fontWeight: 'bold' }}>{userRole}</Text>
         </Text>
         {template && template.templateId && (
-          <Text style={[styles.placeholderText, { color: '#21a4d6', marginTop: 8 }]}>Chosen Shape: <Text style={{ fontWeight: 'bold' }}>{template.templateId.charAt(0).toUpperCase() + template.templateId.slice(1)}</Text></Text>
+          <Text style={[styles.placeholderText, { color: '#21a4d6', marginTop: 8 }]}>
+            Chosen Shape: <Text style={{ fontWeight: 'bold' }}>
+              {template.templateId.charAt(0).toUpperCase() + template.templateId.slice(1)}
+            </Text>
+          </Text>
         )}
       </View>
-      <View style={{ margin: 20 }}>
-        <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Players & Roles:</Text>
-        <FlatList
-          data={users}
-          keyExtractor={item => item}
-          renderItem={({ item }) => (
-            <Text style={item === username ? { fontWeight: 'bold' } : {}}>
-              {item} - {roles[item]}
-              {item === users[0] ? ' 👑' : ''}
-            </Text>
-          )}
-        />
-      </View>
-      <View style={{
-        flex: 1,
-        margin: 20,
-        borderWidth: 2,
-        borderColor: '#21a4d6',
-        borderRadius: 12,
-        justifyContent: 'flex-start',
-        alignItems: 'flex-start',
-        backgroundColor: '#f0f8ff',
-        padding: 12,
-      }}>
-        <Text style={{ color: '#21a4d6', fontSize: 18, marginBottom: 8 }}>
-          {isPainter
-            ? "All Players' Locations & Trails"
-            : "Your Location & Trail"}
+      <View style={{ alignItems: 'center', marginBottom: 16 }}>
+        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#f88a3b' }}>
+          Timer: {timer}s
         </Text>
-        {visibleUsers.map(user => (
-          <View key={user} style={{ marginBottom: 10 }}>
-            <Text style={{ fontWeight: 'bold', color: '#20b265' }}>{user}</Text>
-            <FlatList
-              data={trails[user] || []}
-              keyExtractor={(_, idx) => idx.toString()}
-              renderItem={({ item, index }) => (
-                <Text style={{ fontSize: 12 }}>
-                  {index + 1}. Lat: {item.latitude.toFixed(5)}, Lon: {item.longitude.toFixed(5)}
-                </Text>
-              )}
-            />
-          </View>
-        ))}
       </View>
+      {/* Painter sees the map and timer, Brush sees only the timer */}
+      {isPainter && template && (
+        <PainterMap template={template} />
+      )}
+      {/* Hide all players location and trails box */}
+      {isPainter && (
+        <View style={{ margin: 20 }}>
+          <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Players & Roles:</Text>
+          <FlatList
+            data={users}
+            keyExtractor={item => item}
+            renderItem={({ item }) => (
+              <Text style={item === username ? { fontWeight: 'bold' } : {}}>
+                {item} - {roles[item]}
+                {item === users[0] ? ' 👑' : ''}
+              </Text>
+            )}
+          />
+        </View>
+      )}
       {isAdmin && (
         <TouchableOpacity
           style={[styles.button, { backgroundColor: '#d9534f', alignSelf: 'center', marginBottom: 20 }]}
