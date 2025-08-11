@@ -60,35 +60,59 @@ const GameScreen = ({ route, navigation }) => {
     return () => clearInterval(timerRef.current);
   }, [gameStartTime]);
 
-  // Brushes send location every 3s
+  // Brushes: high-accuracy watch so every meter counts, send immediately and on updates
   useEffect(() => {
     if (!isBrush) return;
-    let interval;
+    let sub;
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
-      const sendOnce = async () => {
-        const loc = await Location.getCurrentPositionAsync({});
-        try {
-          await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              username,
-              gameId,
-              location: {
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-                timestamp: Date.now(),
-              },
-            }),
-          });
-        } catch {}
-      };
-      await sendOnce();
-      interval = setInterval(sendOnce, 1000);
+      try {
+        // Immediate send once with best accuracy
+        const loc0 = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
+        await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username,
+            gameId,
+            location: {
+              latitude: loc0.coords.latitude,
+              longitude: loc0.coords.longitude,
+              timestamp: Date.now(),
+            },
+          }),
+        });
+      } catch {}
+
+      try {
+        sub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            distanceInterval: 1, // meters
+            timeInterval: 1000,   // ms (Android); iOS respects accuracy/distance
+          },
+          async (loc) => {
+            try {
+              await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  username,
+                  gameId,
+                  location: {
+                    latitude: loc.coords.latitude,
+                    longitude: loc.coords.longitude,
+                    timestamp: Date.now(),
+                  },
+                }),
+              });
+            } catch {}
+          }
+        );
+      } catch {}
     })();
-    return () => interval && clearInterval(interval);
+    return () => { try { sub && sub.remove(); } catch {} };
   }, [isBrush, username, gameId]);
 
   // On mount (painter): seed trails once with initial locations so dots appear immediately
