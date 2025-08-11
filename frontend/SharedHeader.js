@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import styles from './styles';
 
-const SharedHeader = ({ navigation, showHome }) => (
+const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut = false }) => (
   <View style={{
     flexDirection: 'row',
     alignItems: 'center',
@@ -19,7 +19,7 @@ const SharedHeader = ({ navigation, showHome }) => (
         <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Home</Text>
       </TouchableOpacity>
     ) : (
-      <TouchableOpacity onPress={() => navigation.navigate('PlayerPage')}>
+      <TouchableOpacity onPress={() => navigation.navigate('PlayerPage', { username })}>
         <Image
           source={require('../assets/profile.png')}
           style={{ width: 32, height: 32 }}
@@ -28,9 +28,17 @@ const SharedHeader = ({ navigation, showHome }) => (
       </TouchableOpacity>
     )}
     {/* Top right: Sign Out */}
-    <TouchableOpacity onPress={() => navigation.replace('Entrance')}>
-      <Text style={{ color: '#d9534f', fontWeight: 'bold', fontSize: 18 }}>Sign Out</Text>
-    </TouchableOpacity>
+    {!hideSignOut && (
+      <TouchableOpacity onPress={async () => {
+        if (onSignOut) {
+          try { await onSignOut(); } catch {}
+        } else {
+          navigation.replace('Entrance');
+        }
+      }}>
+        <Text style={{ color: '#d9534f', fontWeight: 'bold', fontSize: 18 }}>Sign Out</Text>
+      </TouchableOpacity>
+    )}
   </View>
 );
 

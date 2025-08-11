@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, SafeAreaView, TouchableOpacity } from 'react-native';
 import * as Location from 'expo-location';
 import styles from './styles';
-import SharedHeader from './SharedHeader';
 import PainterMap from './PainterMap.web.jsx';
 
 const FUNCTION_APP_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
@@ -92,6 +91,42 @@ const GameScreen = ({ route, navigation }) => {
     return () => interval && clearInterval(interval);
   }, [isBrush, username, gameId]);
 
+  // On mount (painter): seed trails once with initial locations so dots appear immediately
+  useEffect(() => {
+    if (!isPainter) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/getLocations?gameId=${gameId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (cancelled) return;
+          setTrails(prev => {
+            const next = { ...prev };
+            // For all players except painter, ensure at least one point
+            users.forEach(u => {
+              if (roles[u] === 'Painter') return;
+              const existing = next[u] || [];
+              // Try to find location from API
+              const d = data.find(x => x.username === u);
+              if (d && d.latitude != null && d.longitude != null) {
+                // Add point even if duplicate
+                next[u] = [...existing, { latitude: d.latitude, longitude: d.longitude }];
+              } else if (!existing.length && latestPositions[u]) {
+                next[u] = [{ latitude: latestPositions[u].latitude, longitude: latestPositions[u].longitude }];
+              } else if (!existing.length) {
+                // No data yet: keep empty; the poll below will fill as soon as available
+                next[u] = [];
+              }
+            });
+            return next;
+          });
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [isPainter, gameId, users, roles]);
+
   // Painter polls locations from Distances and builds local trails
   useEffect(() => {
     if (!isPainter) return;
@@ -109,15 +144,19 @@ const GameScreen = ({ route, navigation }) => {
           }
         });
         setLatestPositions(latest);
-        // trails: append new point if changed
+        // trails: append new point if changed; also append even if same position to ensure visibility per request
         setTrails(prev => {
           const next = { ...prev };
-          data.forEach(d => {
-            if (d.latitude == null || d.longitude == null) return;
-            const arr = next[d.username] || [];
-            const last = arr[arr.length - 1];
-            if (!last || last.latitude !== d.latitude || last.longitude !== d.longitude) {
-              next[d.username] = [...arr, { latitude: d.latitude, longitude: d.longitude }];
+          // Ensure each non-painter user has at least one point
+          users.forEach(u => {
+            if (roles[u] === 'Painter') return;
+            const d = data.find(x => x.username === u);
+            const arr = next[u] || [];
+            if (d && d.latitude != null && d.longitude != null) {
+              // Always push the reported point (even if duplicate)
+              next[u] = [...arr, { latitude: d.latitude, longitude: d.longitude }];
+            } else if (arr.length === 0 && latest[u]) {
+              next[u] = [{ latitude: latest[u].latitude, longitude: latest[u].longitude }];
             }
           });
           return next;
@@ -127,7 +166,7 @@ const GameScreen = ({ route, navigation }) => {
     poll();
     interval = setInterval(poll, 1000);
     return () => clearInterval(interval);
-  }, [isPainter, gameId]);
+  }, [isPainter, gameId, users, roles]);
 
   // Poll session end
   useEffect(() => {
@@ -152,6 +191,15 @@ const GameScreen = ({ route, navigation }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, endGame: true }),
       });
+      // Fetch latest session (with template) immediately and pass it back
+      try {
+        const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          navigation.replace('WaitingRoom', { sessionId, username, isAdmin, /* pass fresh template */ template: data.template || null });
+          return;
+        }
+      } catch {}
       navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
     } catch {
       setEnding(false);
@@ -161,7 +209,6 @@ const GameScreen = ({ route, navigation }) => {
   // Full screen map with overlays
   return (
     <SafeAreaView style={[styles.safeArea, { flex: 1 }]}>      
-      <SharedHeader navigation={navigation} />
       <View style={{ flex: 1, position: 'relative' }}>
         {isPainter && template ? (
           <PainterMap

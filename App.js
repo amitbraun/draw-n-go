@@ -10,6 +10,7 @@ import LoginScreen from './frontend/LoginScreen.js';
 import SignupScreen from './frontend/SignupScreen';
 import WaitingRoom from './frontend/WaitingRoom';
 import GameScreen from './frontend/GameScreen';
+import PlayerPage from './frontend/PlayerPage';
 
 const Stack = createNativeStackNavigator();
 let clientId = uuidv4();
@@ -27,7 +28,7 @@ export default function App() {
   
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Entrance">
+      <Stack.Navigator initialRouteName="Entrance" screenOptions={{ presentation: 'card' }}>
         <Stack.Screen
           name="Entrance"
           component={EntranceScreen}
@@ -59,6 +60,16 @@ export default function App() {
           name="Game"
           component={GameScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="PlayerPage"
+          component={PlayerPage}
+          options={{
+            headerShown: false,
+            presentation: 'transparentModal',
+            animation: 'fade',
+            contentStyle: { backgroundColor: 'transparent' }
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

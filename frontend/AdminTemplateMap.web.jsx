@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { GoogleMap, Marker, Polygon, useJsApiLoader } from "@react-google-maps/api";
 import Constants from "expo-constants";
 
@@ -8,7 +8,8 @@ export default function AdminTemplateMap({
   template,
   hideControls = false,
   initialCenter,
-  height = '100%'
+  height = '100%',
+  defaultCenter
 }) {
   const [loading, setLoading] = useState(true);
   const [myRegion, setMyRegion] = useState(null);
@@ -18,6 +19,10 @@ export default function AdminTemplateMap({
   const [center, setCenter] = useState(null);
   const [radius, setRadius] = useState(initialRadiusMeters);
   const [locked, setLocked] = useState(false);
+  const [zoom, setZoom] = useState(16);
+
+  const mapRef = useRef(null);
+  const onMapLoad = useCallback((map) => { mapRef.current = map; }, []);
 
   // Sync state with template prop for non-admins
   useEffect(() => {
@@ -26,10 +31,18 @@ export default function AdminTemplateMap({
       setCenter(template.center || null);
       setRadius(template.radiusMeters || initialRadiusMeters);
       setLocked(true);
-      // Center map on template center
       if (template.center && template.center.lat && template.center.lng) {
         setMyRegion({ lat: template.center.lat, lng: template.center.lng });
       }
+      return;
+    }
+    // Before any template is set, non-admins use defaultCenter from backend (admin’s location)
+    if (hideControls && !template && defaultCenter && defaultCenter.latitude && defaultCenter.longitude) {
+      const c = { lat: defaultCenter.latitude, lng: defaultCenter.longitude };
+      setCenter(c);
+      setMyRegion(c);
+      setLocked(true);
+      return;
     }
     if (hideControls && !template) {
       setTemplateId(null);
@@ -37,7 +50,7 @@ export default function AdminTemplateMap({
       setRadius(initialRadiusMeters);
       setLocked(true);
     }
-  }, [hideControls, template, initialRadiusMeters]);
+  }, [hideControls, template, defaultCenter, initialRadiusMeters]);
 
   // For admin, center map on template center if set, else use initialCenter
   useEffect(() => {
@@ -50,12 +63,26 @@ export default function AdminTemplateMap({
     }
   }, [hideControls, center, initialCenter]);
 
-  // For admin, set initial center if provided
+  // For admin, set initial center if provided (only when no template has been selected yet)
   useEffect(() => {
-    if (!hideControls && initialCenter) {
+    if (!hideControls && initialCenter && (templateId == null)) {
       setCenter({ lat: initialCenter.latitude, lng: initialCenter.longitude });
     }
-  }, [hideControls, initialCenter]);
+  }, [hideControls, initialCenter, templateId]);
+
+  // For admin, if a template exists (e.g., after ending a game), pre-fill once and lock so it's visible
+  useEffect(() => {
+    if (!hideControls && template && (templateId == null)) {
+      setTemplateId(template.templateId || null);
+      if (template.center && template.center.lat && template.center.lng) {
+        const c = { lat: template.center.lat, lng: template.center.lng };
+        setCenter(c);
+        setMyRegion(c);
+      }
+      setRadius(template.radiusMeters || initialRadiusMeters);
+      setLocked(true);
+    }
+  }, [hideControls, template, templateId, initialRadiusMeters]);
 
   const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY;
 
@@ -116,25 +143,26 @@ export default function AdminTemplateMap({
     return [];
   }, [center, radius, templateId]);
 
-  // --- permissions + current location (web-safe with browser geolocation) ---
+  // --- permissions + current location (avoid overriding existing template) ---
   useEffect(() => {
+    if (center) { setLoading(false); return; }
+    if (template && template.center && template.center.lat && template.center.lng) {
+      // Respect existing template center entirely
+      const c = { lat: template.center.lat, lng: template.center.lng };
+      setCenter(c); setMyRegion(c); setLoading(false); return;
+    }
+    if (hideControls) { setLoading(false); return; }
+    if (!hideControls && template && templateId != null) { setLoading(false); return; }
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          setCenter({ lat, lng });
-          setMyRegion({ lat, lng });
-          setLoading(false);
+          const lat = pos.coords.latitude; const lng = pos.coords.longitude;
+          setCenter({ lat, lng }); setMyRegion({ lat, lng }); setLoading(false);
         },
-        () => {
-          setLoading(false);
-        }
+        () => setLoading(false)
       );
-    } else {
-      setLoading(false);
-    }
-  }, []);
+    } else { setLoading(false); }
+  }, [hideControls, template, templateId, center]);
 
   const bumpRadius = useCallback(
     (mult) => {
@@ -144,6 +172,36 @@ export default function AdminTemplateMap({
     [locked]
   );
 
+  // Helper: derive zoom from radius to maintain on-screen size
+  const radiusToZoom = useCallback((rMeters) => {
+    // Basic mapping: smaller radius => higher zoom. Tuned empirically.
+    if (!rMeters) return 16;
+    const clamped = Math.max(20, Math.min(2000, rMeters));
+    const z = 18 - Math.log2(clamped / 50); // 50m ~ z=18 baseline
+    return Math.max(12, Math.min(20, Math.round(z)));
+  }, []);
+
+  // Apply template zoom for non-admins, or when template updates
+  useEffect(() => {
+    if (hideControls && template && template.zoomLevel) {
+      setZoom(template.zoomLevel);
+    }
+  }, [hideControls, template]);
+
+  // When admin changes radius, adjust zoom to keep on-screen size relatively constant
+  useEffect(() => {
+    if (!hideControls) {
+      setZoom(radiusToZoom(radius));
+    }
+  }, [radius, hideControls, radiusToZoom]);
+
+  // Also apply zoom from existing template when loading for admin
+  useEffect(() => {
+    if (!hideControls && template && template.zoomLevel) {
+      setZoom(template.zoomLevel);
+    }
+  }, [hideControls, template]);
+
   const handleSet = useCallback(() => {
     if (!templateId || !center) return;
     setLocked(true);
@@ -152,10 +210,27 @@ export default function AdminTemplateMap({
       center,
       radiusMeters: radius,
       vertices,
+      zoomLevel: zoom,
     });
-  }, [templateId, center, radius, vertices, onConfirm]);
+  }, [templateId, center, radius, vertices, onConfirm, zoom]);
 
   const handleEdit = useCallback(() => setLocked(false), []);
+
+  const fitToShape = useCallback(() => {
+    if (!mapRef.current || !vertices || vertices.length === 0) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    vertices.forEach(v => bounds.extend(v));
+    try {
+      mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+      const z = mapRef.current.getZoom();
+      if (typeof z === 'number') setZoom(z);
+    } catch {}
+  }, [vertices]);
+
+  // Fit whenever shape changes (center/radius/templateId)
+  useEffect(() => {
+    fitToShape();
+  }, [fitToShape]);
 
   if (!isLoaded || loading) {
     return (
@@ -276,7 +351,8 @@ export default function AdminTemplateMap({
       <GoogleMap
         mapContainerStyle={{ height: "100%", width: "100%" }}
         center={myRegion}
-        zoom={16}
+        zoom={zoom}
+        onLoad={onMapLoad}
         options={{ disableDefaultUI: true, draggable: !locked }}
         onClick={(e) => {
           if (!locked && !hideControls) {
@@ -309,7 +385,7 @@ export default function AdminTemplateMap({
             options={{
               strokeColor: "#21a4d6",
               fillColor: "#21a4d6",
-              fillOpacity: 0.12,
+              fillOpacity: 0,
               strokeWeight: 2,
             }}
           />

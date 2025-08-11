@@ -7,7 +7,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     cors_headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "*"
+        "Access-Control-Allow-Headers": "*",
+        "Cache-Control": "no-store"
     }
 
     if req.method == "OPTIONS":
@@ -49,8 +50,16 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 template = {
                     "templateId": session["templateId"],
                     "center": center,
-                    "radiusMeters": session["templateRadiusMeters"]
+                    "radiusMeters": session["templateRadiusMeters"],
+                    "zoomLevel": session.get("templateZoom")
                 }
+            # Include defaultCenter for non-admin initial map centering
+            default_center = None
+            if session.get("defaultCenter"):
+                try:
+                    default_center = json.loads(session["defaultCenter"])
+                except Exception:
+                    default_center = session["defaultCenter"]
             return func.HttpResponse(
                 json.dumps({
                     "users": users,
@@ -60,7 +69,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     "currentGameId": session.get("currentGameId"),
                     "roles": json.loads(session.get("roles", "{}")) if session.get("roles") else {},
                     "painter": session.get("painter", ""),
-                    "template": template
+                    "template": template,
+                    "defaultCenter": default_center
                 }),
                 status_code=200,
                 headers={**cors_headers, "Content-Type": "application/json"}
@@ -78,6 +88,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             set_ready = data.get("setReady", False)
             leave = data.get("leave", False)
             set_template = data.get("setTemplate", False)
+            set_default_center = data.get("setDefaultCenter", False)
 
             # Resolve session
             session = None
@@ -103,6 +114,17 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             users = json.loads(session.get("users", "[]"))
             ready_status = json.loads(session.get("readyStatus", "{}"))
 
+            # === Handle setDefaultCenter (admin only) ===
+            if set_default_center:
+                if username != session.get("creator"):
+                    return func.HttpResponse(json.dumps({"error": "Only admin can set default center"}), status_code=403, headers={**cors_headers, "Content-Type": "application/json"})
+                center = data.get("center")
+                if not center or not isinstance(center, dict) or "latitude" not in center or "longitude" not in center:
+                    return func.HttpResponse(json.dumps({"error": "Missing or invalid center {latitude, longitude}"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
+                session["defaultCenter"] = json.dumps(center)
+                session_table.update_entity(session, mode="merge")
+                return func.HttpResponse(json.dumps({"message": "Default center set"}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
+
             # === Handle setTemplate (admin only) ===
             if set_template:
                 # Only admin can set template
@@ -111,11 +133,14 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 template_id = data.get("templateId")
                 center = data.get("center")
                 radius = data.get("radiusMeters")
+                zoom = data.get("zoomLevel")
                 if not (template_id and center and radius):
                     return func.HttpResponse(json.dumps({"error": "Missing templateId, center, or radiusMeters"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
                 session["templateId"] = template_id
                 session["templateCenter"] = json.dumps(center) if isinstance(center, dict) else center
                 session["templateRadiusMeters"] = radius
+                if zoom is not None:
+                    session["templateZoom"] = zoom
                 session_table.update_entity(session, mode="merge")
                 return func.HttpResponse(json.dumps({"message": "Template set"}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
 

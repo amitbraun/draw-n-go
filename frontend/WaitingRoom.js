@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,14 @@ import {
   SafeAreaView,
   ActivityIndicator
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import * as SignalR from '@microsoft/signalr';
 import styles from './styles';
 import AdminTemplateMap from './AdminTemplateMap';
 import SharedHeader from './SharedHeader';
 
 const WaitingRoom = ({ route, navigation }) => {
   const { sessionId, username, isAdmin } = route.params;
+  // If a fresh template is provided (from GameScreen on end), seed state immediately
+  const navTemplate = route.params?.template;
 
   const [users, setUsers] = useState([]);
   const [readyStatus, setReadyStatus] = useState({});
@@ -23,8 +23,12 @@ const WaitingRoom = ({ route, navigation }) => {
   const [errorMsg, setErrorMsg] = useState("");
   const [startError, setStartError] = useState("");
   const [templateMsg, setTemplateMsg] = useState("");
-  const [template, setTemplate] = useState(null); // { templateId, center, radiusMeters }
-  const [myLocation, setMyLocation] = useState(null); // { latitude, longitude }
+  const [template, setTemplate] = useState(navTemplate || null);
+  const [defaultCenter, setDefaultCenter] = useState(null); // { latitude, longitude }
+  const [myLocation, setMyLocation] = useState(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [hadNavTemplate, setHadNavTemplate] = useState(!!navTemplate);
+  const setDefaultCenterAttempted = useRef(false);
 
   const fetchGameEntity = async (gameId) => {
     try {
@@ -50,6 +54,24 @@ const WaitingRoom = ({ route, navigation }) => {
       } catch (e) {}
     })();
   }, [isAdmin]);
+
+  // If admin has a location and there is no template and no defaultCenter yet, set defaultCenter once
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (setDefaultCenterAttempted.current) return;
+    if (myLocation && !template && !defaultCenter) {
+      (async () => {
+        try {
+          await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-username': username },
+            body: JSON.stringify({ sessionId, setDefaultCenter: true, center: myLocation })
+          });
+          setDefaultCenterAttempted.current = true;
+        } catch {}
+      })();
+    }
+  }, [isAdmin, myLocation, template, defaultCenter, sessionId, username]);
 
   const fetchSession = async () => {
     if (!sessionId || !username) {
@@ -81,18 +103,30 @@ const WaitingRoom = ({ route, navigation }) => {
         setErrorMsg(errorMsg);
         setLoading(false);
         if (shouldKick) {
-          navigation.navigate('Main', { username });
+          if (!signingOut) {
+            navigation.navigate('Main', { username });
+          }
         }
         return;
       }
       const data = await response.json();
+      if (signingOut) return; // Do nothing if we're signing out
       setUsers(data.users || []);
       setReadyStatus(data.readyStatus || {});
       setCreator(data.creator || "");
       setErrorMsg("");
       setLoading(false);
-      // Always update template from backend for all users
-      setTemplate(data.template || null);
+      setDefaultCenter(data.defaultCenter || null);
+      // Use backend template unless we had a navTemplate that disappears briefly; prefer non-null
+      if (data.template) {
+        setTemplate(data.template);
+        setHadNavTemplate(false);
+      } else if (!data.template && hadNavTemplate && navTemplate) {
+        // keep the nav template to avoid flicker right after end
+        setTemplate(navTemplate);
+      } else {
+        setTemplate(data.template || null);
+      }
       if (data.isStarted && data.currentGameId) {
         navigation.navigate('Game', {
           sessionId,
@@ -116,29 +150,6 @@ const WaitingRoom = ({ route, navigation }) => {
     const interval = setInterval(fetchSession, 1000); // poll every 1 second
     return () => clearInterval(interval);
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      const unsubscribe = navigation.addListener('beforeRemove', async () => {
-        try {
-          await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-username': username,
-            },
-            body: JSON.stringify({
-              sessionId,
-              leave: true,
-            }),
-          });
-        } catch (err) {
-          console.warn('Auto-leave failed:', err);
-        }
-      });
-      return unsubscribe;
-    }, [navigation, sessionId, username])
-  );
 
   const handleToggleReady = async () => {
     if (!sessionId || !username) {
@@ -233,7 +244,7 @@ const WaitingRoom = ({ route, navigation }) => {
   };
 
   // Admin sets the template (calls JoinSession POST with template info)
-  const handleTemplateConfirm = async ({ templateId, center, radiusMeters }) => {
+  const handleTemplateConfirm = async ({ templateId, center, radiusMeters, zoomLevel }) => {
     try {
       setTemplateMsg('Saving template…');
       const res = await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
@@ -248,6 +259,7 @@ const WaitingRoom = ({ route, navigation }) => {
           templateId,
           center,
           radiusMeters,
+          zoomLevel,
         }),
       });
       if (!res.ok) {
@@ -266,12 +278,18 @@ const WaitingRoom = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { flex: 1 }]}>      
+      <SharedHeader
+        navigation={navigation}
+        username={username}
+        hideSignOut={true}
+      />
       {/* Full-screen map */}
       <View style={{ flex: 1, position: 'relative' }}>
         <AdminTemplateMap
           onConfirm={isAdmin ? handleTemplateConfirm : undefined}
           initialRadiusMeters={120}
           initialCenter={isAdmin && myLocation ? myLocation : undefined}
+          defaultCenter={!isAdmin ? defaultCenter : undefined}
           disabled={!isAdmin}
           template={template}
           hideControls={!isAdmin}
@@ -316,9 +334,9 @@ const WaitingRoom = ({ route, navigation }) => {
 
           {isAdmin && (
             <TouchableOpacity
-              style={[styles.button, { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: allReady ? '#20b265' : '#cccccc', minWidth: 120 }]}
+              style={[styles.button, { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: (allReady && template) ? '#20b265' : '#cccccc', minWidth: 120 }]}
               onPress={handleStartGame}
-              disabled={!allReady}
+              disabled={!(allReady && template)}
             >
               <Text style={[styles.buttonText, { fontSize: 14 }]}>Start</Text>
             </TouchableOpacity>

@@ -99,7 +99,7 @@ const MainScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <SharedHeader navigation={navigation} /> {/* <-- Add this line */}
+      <SharedHeader navigation={navigation} username={username} />
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Main Screen</Text>
         <Text style={styles.placeholderText}>Your location-based features will appear here.</Text>

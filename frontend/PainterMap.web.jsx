@@ -1,27 +1,35 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { GoogleMap, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { GoogleMap, Polygon, Polyline, useJsApiLoader, Circle } from "@react-google-maps/api";
 import Constants from "expo-constants";
 
 export default function PainterMap({
-  template, // { templateId, center, radiusMeters }
+  template, // { templateId, center, radiusMeters, zoomLevel }
   height = 300,
   trails = {}, // { username: [{latitude, longitude}, ...] }
-  latestPositions = {}, // { username: { latitude, longitude } }
+  latestPositions = {}, // kept for API compatibility, not rendered
   playerColors = {}, // { username: '#rrggbb' }
   disableInteractions = true,
 }) {
   const [myRegion, setMyRegion] = useState(null);
+  const [zoom, setZoom] = useState(16);
+  const mapRef = useRef(null);
+  const onMapLoad = (map) => { mapRef.current = map; };
 
   // Extract template data
   const templateId = template?.templateId;
   const center = template?.center;
   const radius = template?.radiusMeters;
+  const zoomLevel = template?.zoomLevel;
 
   useEffect(() => {
     if (center && center.lat && center.lng) {
       setMyRegion({ lat: center.lat, lng: center.lng });
     }
   }, [center]);
+
+  useEffect(() => {
+    if (typeof zoomLevel === 'number') setZoom(zoomLevel);
+  }, [zoomLevel]);
 
   const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY;
 
@@ -80,6 +88,19 @@ export default function PainterMap({
     return [];
   }, [center, radius, templateId]);
 
+  const fitToShape = () => {
+    if (!mapRef.current || !vertices || vertices.length === 0) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    vertices.forEach(v => bounds.extend(v));
+    try {
+      mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+    } catch {}
+  };
+
+  useEffect(() => {
+    fitToShape();
+  }, [JSON.stringify(vertices)]);
+
   if (!isLoaded) {
     return (
       <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -98,60 +119,43 @@ export default function PainterMap({
     );
   }
 
-  const googleSymbolCircle = (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.SymbolPath && window.google.maps.SymbolPath.CIRCLE) || null;
-
   return (
     <div style={{ height, position: "relative" }}>
       <GoogleMap
         mapContainerStyle={{ height: "100%", width: "100%" }}
         center={myRegion}
-        zoom={16}
+        zoom={zoom}
+        onLoad={onMapLoad}
         options={{ disableDefaultUI: true, draggable: !disableInteractions }}
       >
-        {center && (
-          <Marker
-            position={center}
-            draggable={false}
-          />
-        )}
         {vertices.length >= 3 && (
           <Polygon
             paths={vertices}
-            options={{
-              strokeColor: "#21a4d6",
-              fillColor: "#21a4d6",
-              fillOpacity: 0.12,
-              strokeWeight: 2,
-            }}
+            options={{ strokeColor: "#21a4d6", fillOpacity: 0, strokeWeight: 2 }}
           />
         )}
-        {/* Trails */}
-        {Object.entries(trails).map(([user, points]) => (
-          points && points.length > 1 ? (
+        {Object.entries(trails).map(([user, points]) => {
+          if (!points || points.length === 0) return null;
+          const color = playerColors[user] || "#ff6600";
+          if (points.length === 1) {
+            const p = points[0];
+            return (
+              <Circle
+                key={`trail-dot-${user}`}
+                center={{ lat: p.latitude, lng: p.longitude }}
+                radius={3}
+                options={{ strokeColor: color, strokeOpacity: 1, strokeWeight: 4, fillColor: color, fillOpacity: 0.9, clickable: false }}
+              />
+            );
+          }
+          return (
             <Polyline
               key={`trail-${user}`}
               path={points.map(p => ({ lat: p.latitude, lng: p.longitude }))}
-              options={{ strokeColor: playerColors[user] || "#ff6600", strokeWeight: 4, strokeOpacity: 0.9 }}
+              options={{ strokeColor: color, strokeWeight: 4, strokeOpacity: 0.9 }}
             />
-          ) : null
-        ))}
-        {/* Latest markers */}
-        {Object.entries(latestPositions).map(([user, pos]) => (
-          pos && pos.latitude != null && pos.longitude != null ? (
-            <Marker
-              key={`marker-${user}`}
-              position={{ lat: pos.latitude, lng: pos.longitude }}
-              icon={googleSymbolCircle ? {
-                path: googleSymbolCircle,
-                scale: 6,
-                fillColor: playerColors[user] || "#ff6600",
-                fillOpacity: 1,
-                strokeColor: "#ffffff",
-                strokeWeight: 2,
-              } : undefined}
-            />
-          ) : null
-        ))}
+          );
+        })}
       </GoogleMap>
       <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(255,255,255,0.9)", padding: "6px 10px", borderRadius: 8 }}>
         {templateId ? `Template: ${templateId} • Radius: ${Math.round(radius)}m` : "No template"}
