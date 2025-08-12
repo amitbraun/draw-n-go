@@ -11,6 +11,7 @@ import SignupScreen from './frontend/SignupScreen';
 import WaitingRoom from './frontend/WaitingRoom';
 import GameScreen from './frontend/GameScreen';
 import PlayerPage from './frontend/PlayerPage';
+import NewTemplateCreator from './frontend/NewTemplateCreator.web.jsx';
 
 const Stack = createNativeStackNavigator();
 let clientId = uuidv4();
@@ -70,6 +71,11 @@ export default function App() {
             animation: 'fade',
             contentStyle: { backgroundColor: 'transparent' }
           }}
+        />
+        <Stack.Screen
+          name="CreateTemplate"
+          component={NewTemplateCreator}
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>

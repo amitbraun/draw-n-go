@@ -11,6 +11,7 @@ import styles from './styles';
 import AdminTemplateMap from './AdminTemplateMap';
 import SharedHeader from './SharedHeader';
 import ResultsModal from './ResultsModal';
+import NewTemplateCreator from './NewTemplateCreator';
 
 const WaitingRoom = ({ route, navigation }) => {
   const { sessionId, username, isAdmin } = route.params;
@@ -32,6 +33,7 @@ const WaitingRoom = ({ route, navigation }) => {
   const setDefaultCenterAttempted = useRef(false);
   const [selectedPainter, setSelectedPainter] = useState('random');
   const [showModal, setShowModal] = useState(false);
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
 
   const fetchGameEntity = async (gameId) => {
     try {
@@ -311,11 +313,14 @@ const WaitingRoom = ({ route, navigation }) => {
         navigation={navigation}
         username={username}
         hideSignOut={true}
+        onCreateTemplate={username === 'admin' ? () => setCreatingTemplate(true) : undefined}
       />
       {/* Full-screen map */}
       <View style={{ flex: 1, position: 'relative' }}>
         <AdminTemplateMap
           onConfirm={isAdmin ? handleTemplateConfirm : undefined}
+          // Hide normal map when creating new template
+          {...(creatingTemplate ? { height: 0, style: { display: 'none' } } : {})}
           initialRadiusMeters={120}
           initialCenter={isAdmin && myLocation ? myLocation : undefined}
           defaultCenter={!isAdmin ? defaultCenter : undefined}
@@ -397,6 +402,12 @@ const WaitingRoom = ({ route, navigation }) => {
             <Text style={[styles.error, { marginTop: 6 }]}>{startError}</Text>
           )}
         </View>
+
+        {creatingTemplate && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 50 }}>
+            <NewTemplateCreator onClose={() => setCreatingTemplate(false)} onSaved={() => { setCreatingTemplate(false); fetchSession(); }} />
+          </View>
+        )}
       </View>
       <ResultsModal
         visible={showModal}

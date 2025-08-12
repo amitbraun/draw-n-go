@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import styles from './styles';
 
-const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut = false }) => (
+const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut = false, onCreateTemplate }) => (
   <View style={{
     flexDirection: 'row',
     alignItems: 'center',
@@ -13,21 +13,33 @@ const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut =
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   }}>
-    {/* Top left: either profile logo or home button */}
-    {showHome ? (
-      <TouchableOpacity onPress={() => navigation.navigate('Main')}>
-        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Home</Text>
-      </TouchableOpacity>
-    ) : (
-      <TouchableOpacity onPress={() => navigation.navigate('PlayerPage', { username })}>
-        <Image
-          source={require('../assets/profile.png')}
-          style={{ width: 32, height: 32 }}
-          accessibilityLabel="Profile"
-        />
-      </TouchableOpacity>
-    )}
-    {/* Top right: Sign Out */}
+    {/* Left section with possible create button */}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      {showHome ? (
+        <TouchableOpacity onPress={() => navigation.navigate('Main')}>
+          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Home</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity onPress={() => navigation.navigate('PlayerPage', { username })}>
+          <Image
+            source={require('../assets/profile.png')}
+            style={{ width: 32, height: 32 }}
+            accessibilityLabel="Profile"
+          />
+        </TouchableOpacity>
+      )}
+      {username === 'admin' && onCreateTemplate && (
+        <TouchableOpacity onPress={onCreateTemplate} style={{ marginLeft: 12 }}>
+          <Text style={{ color: '#fff', fontWeight: '600' }}>Create New Template</Text>
+        </TouchableOpacity>
+      )}
+      {username === 'admin' && !onCreateTemplate && (
+        <TouchableOpacity onPress={() => navigation.navigate('CreateTemplate')} style={{ marginLeft: 12 }}>
+          <Text style={{ color: '#fff', fontWeight: '600' }}>Create New Template</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+    {/* Right: Sign Out */}
     {!hideSignOut && (
       <TouchableOpacity onPress={async () => {
         if (onSignOut) {
