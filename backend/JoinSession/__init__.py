@@ -2,6 +2,7 @@ import azure.functions as func
 from azure.data.tables import TableClient
 import json
 import os
+import math
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     cors_headers = {
@@ -60,6 +61,37 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     "zoomLevel": session.get("templateZoom"),
                     "vertices": vertices
                 }
+                # Fallback: if polygon center missing but have vertices, compute centroid
+                if template["templateId"] == 'polygon' and (not template.get("center") or 'lat' not in template['center']) and vertices:
+                    try:
+                        lats = [v['lat'] for v in vertices if 'lat' in v]
+                        lngs = [v['lng'] for v in vertices if 'lng' in v]
+                        if lats and lngs:
+                            template['center'] = {
+                                'lat': sum(lats)/len(lats),
+                                'lng': sum(lngs)/len(lngs)
+                            }
+                    except Exception:
+                        pass
+                # Attach catalog definition (baseVertices) for non-polygon shapes so clients need not refetch or hardcode
+                if template["templateId"] != 'polygon':
+                    try:
+                        templates_table = TableClient.from_connection_string(connection_string, table_name="Templates")
+                        tdef = templates_table.get_entity(partition_key="template", row_key=template["templateId"])
+                        base_vertices_raw = tdef.get("baseVertices")
+                        base_vertices = None
+                        if base_vertices_raw:
+                            try:
+                                if isinstance(base_vertices_raw, str):
+                                    base_vertices = json.loads(base_vertices_raw)
+                                else:
+                                    base_vertices = base_vertices_raw
+                            except Exception:
+                                base_vertices = None
+                        if base_vertices:
+                            template["catalogDefinition"] = { "baseVertices": base_vertices }
+                    except Exception:
+                        pass
             # Include defaultCenter for non-admin initial map centering
             default_center = None
             if session.get("defaultCenter"):
@@ -141,18 +173,68 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 center = data.get("center")
                 radius = data.get("radiusMeters")
                 zoom = data.get("zoomLevel")
-                vertices = data.get("vertices")
+                incoming_vertices = data.get("vertices")  # only for polygon from client
                 if not (template_id and center and radius):
                     return func.HttpResponse(json.dumps({"error": "Missing templateId, center, or radiusMeters"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
+                # Persist basics
                 session["templateId"] = template_id
                 session["templateCenter"] = json.dumps(center) if isinstance(center, dict) else center
                 session["templateRadiusMeters"] = radius
                 if zoom is not None:
                     session["templateZoom"] = zoom
-                if vertices and isinstance(vertices, list):
-                    session["templateVertices"] = json.dumps(vertices)
+
+                # Always store concrete vertices in session for all shapes so non-admins can consume immediately
+                computed_vertices = None
+                try:
+                    if template_id == 'polygon':
+                        # Use incoming vertices directly (validated basic type)
+                        if incoming_vertices and isinstance(incoming_vertices, list) and len(incoming_vertices) >= 3:
+                            computed_vertices = incoming_vertices
+                    else:
+                        # Lookup template definition for baseVertices
+                        templates_table = TableClient.from_connection_string(connection_string, table_name="Templates")
+                        try:
+                            tdef = templates_table.get_entity(partition_key="template", row_key=template_id)
+                            base_raw = tdef.get("baseVertices")
+                            base_vertices = None
+                            if base_raw:
+                                if isinstance(base_raw, str):
+                                    try:
+                                        base_vertices = json.loads(base_raw)
+                                    except Exception:
+                                        base_vertices = None
+                                elif isinstance(base_raw, list):
+                                    base_vertices = base_raw
+                            if base_vertices:
+                                # Scale normalized base (x,y) by lat/lng deltas derived from radius
+                                lat = center.get('lat') or center.get('latitude')
+                                lng = center.get('lng') or center.get('longitude')
+                                if lat is not None and lng is not None:
+                                    d_lat = radius / 111320.0
+                                    try:
+                                        d_lng = radius / (111320.0 * math.cos(math.radians(lat)))
+                                    except Exception:
+                                        d_lng = radius / 111320.0
+                                    scaled = []
+                                    for p in base_vertices:
+                                        x = p.get('x', 0)
+                                        y = p.get('y', 0)
+                                        scaled.append({
+                                            'lat': lat + y * d_lat,
+                                            'lng': lng + x * d_lng
+                                        })
+                                    if len(scaled) >= 3:
+                                        computed_vertices = scaled
+                        except Exception:
+                            pass
+                except Exception:
+                    computed_vertices = None
+
+                if computed_vertices:
+                    session["templateVertices"] = json.dumps(computed_vertices)
                 else:
                     session["templateVertices"] = None
+
                 session_table.update_entity(session, mode="merge")
                 return func.HttpResponse(json.dumps({"message": "Template set"}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
 

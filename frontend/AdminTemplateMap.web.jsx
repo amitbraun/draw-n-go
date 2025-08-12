@@ -23,6 +23,10 @@ export default function AdminTemplateMap({
 
   const [customVertices, setCustomVertices] = useState([]); // for Polygon template
   const [prevClearedVertices, setPrevClearedVertices] = useState(null); // backup for clear/undo
+  // Added: catalog state for template definitions (fix for undefined 'catalog')
+  const [catalog, setCatalog] = useState([]);
+  const [catalogError, setCatalogError] = useState(null);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
 
   const mapRef = useRef(null);
   const onMapLoad = useCallback((map) => { mapRef.current = map; }, []);
@@ -97,6 +101,47 @@ export default function AdminTemplateMap({
   const metersToDegLat = (m) => m / 111_320;
   const metersToDegLng = (m, lat) => m / (111_320 * Math.cos((lat * Math.PI) / 180));
 
+  // Normalize any center object to {lat,lng} (accepts {lat,lng} or {latitude,longitude} and numeric strings)
+  const normalizeCenter = useCallback((c) => {
+    if (!c || typeof c !== 'object') return null;
+    let lat = c.lat ?? c.latitude;
+    let lng = c.lng ?? c.longitude;
+    if (lat == null || lng == null) return null;
+    lat = Number(lat); lng = Number(lng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+    return { lat, lng };
+  }, []);
+
+  // Ensure internal center stays normalized whenever template or center changes
+  useEffect(() => {
+    setCenter(prev => normalizeCenter(prev) || prev);
+  }, [normalizeCenter]);
+
+  // Update myRegion whenever center normalizes
+  useEffect(() => {
+    const nc = normalizeCenter(center);
+    if (nc) setMyRegion(nc);
+  }, [center, normalizeCenter]);
+
+  // New: derive generatedVertices from catalog entry instead of hardcoded shape math (except polygon)
+  // EXPECTATION: For non-polygon shapes, catalog supplies baseVertices: array of normalized coordinates
+  // Each vertex p: { x, y } in range roughly [-1,1] relative to center, describing the unit shape at radius=1.
+  // We scale x by dLng and y by dLat so radiusMeters sets half-extent. Only center & radius are mutable.
+  const generatedVertices = useMemo(() => {
+    if (!templateId || templateId === 'polygon') return [];
+    const c = normalizeCenter(center);
+    if (!c) return [];
+    const def = catalog.find(ca => ca.templateId === templateId);
+    if (!def || !Array.isArray(def.baseVertices)) return [];
+    const { lat, lng } = c;
+    const dLat = metersToDegLat(radius);
+    const dLng = metersToDegLng(radius, lat);
+    return def.baseVertices.map(p => ({
+      lat: lat + (p.y || 0) * dLat,
+      lng: lng + (p.x || 0) * dLng
+    }));
+  }, [center, templateId, radius, catalog, normalizeCenter]);
+
   const vertices = useMemo(() => {
     if (!center || !templateId) return [];
     const { lat, lng } = center;
@@ -116,32 +161,6 @@ export default function AdminTemplateMap({
       const left = { lat: lat - dLat, lng: lng - dLng };
       const right = { lat: lat - dLat, lng: lng + dLng };
       return [top, right, left];
-    }
-    if (templateId === "circle") {
-      // Approximate circle with polygon (32 points)
-      const points = [];
-      for (let i = 0; i < 32; i++) {
-        const angle = (2 * Math.PI * i) / 32;
-        const dLatC = dLat * Math.cos(angle);
-        const dLngC = dLng * Math.sin(angle);
-        points.push({ lat: lat + dLatC, lng: lng + dLngC });
-      }
-      return points;
-    }
-    if (templateId === "star") {
-      // 5-pointed star, alternating outer/inner radius
-      const points = [];
-      const numPoints = 10;
-      const outerR = 1;
-      const innerR = 0.4;
-      for (let i = 0; i < numPoints; i++) {
-        const r = i % 2 === 0 ? outerR : innerR;
-        const angle = (Math.PI / 2) + (2 * Math.PI * i) / numPoints;
-        const dLatS = dLat * r * Math.cos(angle);
-        const dLngS = dLng * r * Math.sin(angle);
-        points.push({ lat: lat + dLatS, lng: lng + dLngS });
-      }
-      return points;
     }
     return [];
   }, [center, radius, templateId]);
@@ -193,10 +212,10 @@ export default function AdminTemplateMap({
 
   // When admin changes radius, adjust zoom to keep on-screen size relatively constant
   useEffect(() => {
-    if (!hideControls) {
+    if (!hideControls && templateId !== 'polygon') {
       setZoom(radiusToZoom(radius));
     }
-  }, [radius, hideControls, radiusToZoom]);
+  }, [radius, hideControls, radiusToZoom, templateId]);
 
   // Also apply zoom from existing template when loading for admin
   useEffect(() => {
@@ -222,8 +241,8 @@ export default function AdminTemplateMap({
   const effectiveVertices = useMemo(() => {
     if (templateId === 'polygon') return customVertices;
     if (hideControls && template && template.templateId === 'polygon' && customVertices.length) return customVertices;
-    return vertices; // auto-generated shapes
-  }, [templateId, customVertices, vertices, hideControls, template]);
+    return generatedVertices; // now derived from catalog
+  }, [templateId, customVertices, generatedVertices, hideControls, template]);
 
   // --- map event handlers ---
   const handleMapClick = useCallback((e) => {
@@ -317,33 +336,83 @@ export default function AdminTemplateMap({
       verticesToSend = customVertices;
     }
     if (!finalCenter) return;
+
+    // Only now (on Set) compute zoom for polygon by fitting its bounds once.
+    let finalZoom = zoom;
+    if (templateId === 'polygon' && mapRef.current && customVertices.length >= 3) {
+      try {
+        const bounds = new window.google.maps.LatLngBounds();
+        customVertices.forEach(v => bounds.extend(v));
+        mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+        const z = mapRef.current.getZoom();
+        if (typeof z === 'number') {
+          setZoom(z); // update local state
+          finalZoom = z; // use in payload
+        }
+      } catch {}
+    }
+
     setLocked(true);
     onConfirm?.({
       templateId,
       center: finalCenter,
       radiusMeters: finalRadius,
       vertices: verticesToSend,
-      zoomLevel: zoom,
+      zoomLevel: finalZoom,
     });
   }, [templateId, center, radius, customVertices, onConfirm, zoom]);
 
   const handleEdit = useCallback(() => setLocked(false), []);
 
   const fitToShape = useCallback(() => {
-    if (!mapRef.current || !vertices || vertices.length === 0) return;
+    // For polygon while editing (unlocked), keep current zoom & center stable
+    if (templateId === 'polygon' && !locked) return;
+    if (!mapRef.current || !effectiveVertices || effectiveVertices.length === 0) return;
     const bounds = new window.google.maps.LatLngBounds();
-    vertices.forEach(v => bounds.extend(v));
+    effectiveVertices.forEach(v => bounds.extend(v));
     try {
       mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
       const z = mapRef.current.getZoom();
       if (typeof z === 'number') setZoom(z);
     } catch {}
-  }, [vertices]);
+  }, [effectiveVertices, templateId, locked]);
 
   // Fit whenever shape changes (center/radius/templateId)
   useEffect(() => {
     fitToShape();
   }, [fitToShape]);
+
+  const dropdownOptions = useMemo(() => {
+    const opts = [];
+    // All templateIds from catalog
+    catalog.forEach(t => {
+      if (t.templateId) opts.push({ id: t.templateId, label: t.templateId });
+    });
+    // Always append polygon option for ad-hoc custom drawing
+    if (!opts.find(o => o.id === 'polygon')) opts.push({ id: 'polygon', label: 'polygon' });
+    // Sort alphabetically for consistency
+    return opts.sort((a,b) => a.id.localeCompare(b.id));
+  }, [catalog]);
+
+  useEffect(() => {
+    // Fetch templates catalog once (read-only). Provides baseVertices for non-polygon shapes.
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch('https://draw-n-go.azurewebsites.net/api/GetTemplates?t=' + Date.now(), { cache: 'no-store' });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (aborted) return;
+        setCatalog(Array.isArray(data.templates) ? data.templates : []);
+        setCatalogLoaded(true);
+      } catch (e) {
+        if (aborted) return;
+        setCatalogError(e.message || 'Failed to load templates');
+        setCatalogLoaded(true);
+      }
+    })();
+    return () => { aborted = true; };
+  }, []);
 
   if (!isLoaded || loading) {
     return (
@@ -379,16 +448,17 @@ export default function AdminTemplateMap({
               fontWeight: 600,
               color: "#21a4d6",
               background: "#fff",
-              minWidth: 140
+              minWidth: 160
             }}
           >
-            <option value="" disabled>Select shape…</option>
-            <option value="square">Square</option>
-            <option value="triangle">Triangle</option>
-            <option value="circle">Circle</option>
-            <option value="star">Star</option>
-            <option value="polygon">Polygon</option>
+            <option value="" disabled>Select template…</option>
+            {dropdownOptions.map(opt => (
+              <option key={opt.id} value={opt.id}>{opt.label}</option>
+            ))}
           </select>
+          {catalogError && (
+            <span style={{ fontSize: 10, color: 'red', maxWidth: 180, textAlign: 'right' }}>Templates load failed (fallback list in use)</span>
+          )}
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -512,6 +582,8 @@ export default function AdminTemplateMap({
         {generatedOrCustomPolygon}
         {!hideControls && vertexMarkers}
       </GoogleMap>
+      {/* Catalog debug (optional) */}
+      {/* <pre style={{position:'absolute',bottom:0,left:0,fontSize:10,background:'rgba(255,255,255,0.6)'}}>{JSON.stringify(catalog,null,2)}</pre> */}
     </div>
   );
 }

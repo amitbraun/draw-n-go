@@ -51,45 +51,18 @@ export default function PainterMap({
     const dLat = metersToDegLat(radius);
     const dLng = metersToDegLng(radius, lat);
 
-    if (templateId === "square") {
-      return [
-        { lat: lat + dLat, lng: lng - dLng },
-        { lat: lat + dLat, lng: lng + dLng },
-        { lat: lat - dLat, lng: lng + dLng },
-        { lat: lat - dLat, lng: lng - dLng },
-      ];
+    const def = template?.catalogDefinition;
+    if (def && Array.isArray(def.baseVertices)) {
+      return def.baseVertices.map(p => ({ lat: lat + (p.y || 0) * dLat, lng: lng + (p.x || 0) * dLng }));
     }
-    if (templateId === "triangle") {
-      const top = { lat: lat + dLat, lng: lng };
-      const left = { lat: lat - dLat, lng: lng - dLng };
-      const right = { lat: lat - dLat, lng: lng + dLng };
-      return [top, right, left];
+    // Legacy fallback: approximate circle if no baseVertices definition
+    const pts = [];
+    const POINTS = 32;
+    for (let i = 0; i < POINTS; i++) {
+      const angle = (2 * Math.PI * i) / POINTS;
+      pts.push({ lat: lat + dLat * Math.cos(angle), lng: lng + dLng * Math.sin(angle) });
     }
-    if (templateId === "circle") {
-      const points = [];
-      for (let i = 0; i < 32; i++) {
-        const angle = (2 * Math.PI * i) / 32;
-        const dLatC = dLat * Math.cos(angle);
-        const dLngC = dLng * Math.sin(angle);
-        points.push({ lat: lat + dLatC, lng: lng + dLngC });
-      }
-      return points;
-    }
-    if (templateId === "star") {
-      const points = [];
-      const numPoints = 10;
-      const outerR = 1;
-      const innerR = 0.4;
-      for (let i = 0; i < numPoints; i++) {
-        const r = i % 2 === 0 ? outerR : innerR;
-        const angle = (Math.PI / 2) + (2 * Math.PI * i) / numPoints;
-        const dLatS = dLat * r * Math.cos(angle);
-        const dLngS = dLng * r * Math.sin(angle);
-        points.push({ lat: lat + dLatS, lng: lng + dLngS });
-      }
-      return points;
-    }
-    return [];
+    return pts;
   }, [center, radius, templateId, template]);
 
   const fitToShape = () => {
