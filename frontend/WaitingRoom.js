@@ -10,6 +10,7 @@ import {
 import styles from './styles';
 import AdminTemplateMap from './AdminTemplateMap';
 import SharedHeader from './SharedHeader';
+import ResultsModal from './ResultsModal';
 
 const WaitingRoom = ({ route, navigation }) => {
   const { sessionId, username, isAdmin } = route.params;
@@ -30,6 +31,7 @@ const WaitingRoom = ({ route, navigation }) => {
   const [hadNavTemplate, setHadNavTemplate] = useState(!!navTemplate);
   const setDefaultCenterAttempted = useRef(false);
   const [selectedPainter, setSelectedPainter] = useState('random');
+  const [showModal, setShowModal] = useState(false);
 
   const fetchGameEntity = async (gameId) => {
     try {
@@ -296,6 +298,13 @@ const WaitingRoom = ({ route, navigation }) => {
     }
   };
 
+  useEffect(() => {
+    // Show modal only once when arriving with the flag
+    if (route.params?.showResultsModal) {
+      setShowModal(true);
+    }
+  }, [route.params?.showResultsModal]);
+
   return (
     <SafeAreaView style={[styles.safeArea, { flex: 1 }]}>      
       <SharedHeader
@@ -389,6 +398,11 @@ const WaitingRoom = ({ route, navigation }) => {
           )}
         </View>
       </View>
+      <ResultsModal
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        username={username}
+      />
     </SafeAreaView>
   );
 };

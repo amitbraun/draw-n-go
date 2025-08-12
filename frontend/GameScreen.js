@@ -222,11 +222,11 @@ const GameScreen = ({ route, navigation }) => {
         const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}&t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: data.template || template || null });
+          navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: data.template || template || null, showResultsModal: true });
           return;
         }
       } catch {}
-      navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: template || null });
+      navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template, showResultsModal: true });
     } catch {
       setEnding(false);
     }
