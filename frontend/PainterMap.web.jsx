@@ -114,23 +114,73 @@ export default function PainterMap({
         {Object.entries(trails).map(([user, points]) => {
           if (!points || points.length === 0) return null;
           const color = playerColors[user] || "#ff6600";
-          if (points.length === 1) {
-            const p = points[0];
+          const uniquePoints = [];
+          for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            const last = uniquePoints[uniquePoints.length - 1];
+            if (!last || last.latitude !== p.latitude || last.longitude !== p.longitude) {
+              uniquePoints.push(p);
+            }
+          }
+          if (uniquePoints.length === 1) {
+            const p = uniquePoints[0];
+            // Single small forward arrow anchored to same point (degenerate direction)
             return (
-              <Circle
+              <Polyline
                 key={`trail-dot-${user}`}
-                center={{ lat: p.latitude, lng: p.longitude }}
-                radius={3}
-                options={{ strokeColor: color, strokeOpacity: 1, strokeWeight: 4, fillColor: color, fillOpacity: 0.9, clickable: false }}
+                path={[{ lat: p.latitude, lng: p.longitude }, { lat: p.latitude + 1e-7, lng: p.longitude + 1e-7 }]}
+                options={{
+                  strokeOpacity: 0,
+                  icons: [
+                    {
+                      icon: {
+                        path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                        scale: 2,
+                        strokeColor: color,
+                        strokeOpacity: 1,
+                        strokeWeight: 2,
+                        fillColor: color,
+                        fillOpacity: 1,
+                      },
+                      offset: '100%',
+                    },
+                  ],
+                }}
               />
             );
           }
+          const path = uniquePoints.map(p => ({ lat: p.latitude, lng: p.longitude }));
+          const head = uniquePoints[uniquePoints.length - 1];
+          const prev = uniquePoints[uniquePoints.length - 2];
           return (
-            <Polyline
-              key={`trail-${user}`}
-              path={points.map(p => ({ lat: p.latitude, lng: p.longitude }))}
-              options={{ strokeColor: color, strokeWeight: 4, strokeOpacity: 0.9 }}
-            />
+            <React.Fragment key={`trail-${user}`}>
+              <Polyline
+                path={path}
+                options={{ strokeColor: color, strokeWeight: 4, strokeOpacity: 0.9 }}
+              />
+              {window.google && window.google.maps && prev && head && (
+                <Polyline
+                  path={[{ lat: prev.latitude, lng: prev.longitude }, { lat: head.latitude, lng: head.longitude }]}
+                  options={{
+                    strokeOpacity: 0,
+                    icons: [
+                      {
+                        icon: {
+                          path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                          scale: 2,
+                          strokeColor: color,
+                          strokeOpacity: 1,
+                          strokeWeight: 2,
+                          fillColor: color,
+                          fillOpacity: 1,
+                        },
+                        offset: '100%',
+                      },
+                    ],
+                  }}
+                />
+              )}
+            </React.Fragment>
           );
         })}
       </GoogleMap>

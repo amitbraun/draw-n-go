@@ -73,44 +73,27 @@ const GameScreen = ({ route, navigation }) => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       try {
-        // Immediate send once with best accuracy
         const loc0 = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
         await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username,
-            gameId,
-            location: {
-              latitude: loc0.coords.latitude,
-              longitude: loc0.coords.longitude,
-              timestamp: Date.now(),
-            },
-          }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, gameId, location: { latitude: loc0.coords.latitude, longitude: loc0.coords.longitude, timestamp: Date.now() } })
         });
       } catch {}
-
       try {
         sub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
-            distanceInterval: 1, // meters
-            timeInterval: 1000,   // ms (Android); iOS respects accuracy/distance
+            distanceInterval: 1, // 1m granularity
+            timeInterval: 500,   // was 1000ms -> 500ms for higher temporal resolution
           },
           async (loc) => {
             try {
               await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  username,
-                  gameId,
-                  location: {
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude,
-                    timestamp: Date.now(),
-                  },
-                }),
+                  username, gameId,
+                  location: { latitude: loc.coords.latitude, longitude: loc.coords.longitude, timestamp: Date.now() }
+                })
               });
             } catch {}
           }
@@ -164,36 +147,28 @@ const GameScreen = ({ route, navigation }) => {
       try {
         const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/getLocations?gameId=${gameId}`);
         if (!res.ok) return;
-        const data = await res.json(); // [{username, latitude, longitude, totalDistance, timestamp}]
-        // latest positions
+        const data = await res.json();
         const latest = {};
-        data.forEach(d => {
-          if (d.latitude != null && d.longitude != null) {
-            latest[d.username] = { latitude: d.latitude, longitude: d.longitude };
-          }
-        });
+        data.forEach(d => { if (d.latitude != null && d.longitude != null) { latest[d.username] = { latitude: d.latitude, longitude: d.longitude }; } });
         setLatestPositions(latest);
-        // trails: append new point if changed; also append even if same position to ensure visibility per request
         setTrails(prev => {
           const next = { ...prev };
-          // Ensure each non-painter user has at least one point
-          users.forEach(u => {
-            if (roles[u] === 'Painter') return;
-            const d = data.find(x => x.username === u);
-            const arr = next[u] || [];
-            if (d && d.latitude != null && d.longitude != null) {
-              // Always push the reported point (even if duplicate)
-              next[u] = [...arr, { latitude: d.latitude, longitude: d.longitude }];
-            } else if (arr.length === 0 && latest[u]) {
-              next[u] = [{ latitude: latest[u].latitude, longitude: latest[u].longitude }];
-            }
-          });
+            users.forEach(u => {
+              if (roles[u] === 'Painter') return;
+              const d = data.find(x => x.username === u);
+              const arr = next[u] || [];
+              if (d && d.latitude != null && d.longitude != null) {
+                next[u] = [...arr, { latitude: d.latitude, longitude: d.longitude }];
+              } else if (arr.length === 0 && latest[u]) {
+                next[u] = [{ latitude: latest[u].latitude, longitude: latest[u].longitude }];
+              }
+            });
           return next;
         });
       } catch {}
     };
     poll();
-    interval = setInterval(poll, 1000);
+    interval = setInterval(poll, 300); // was 1000ms, then 500ms; now 300ms for smoother updates
     return () => clearInterval(interval);
   }, [isPainter, gameId, users, roles]);
 
