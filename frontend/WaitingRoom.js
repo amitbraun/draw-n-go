@@ -402,6 +402,7 @@ const WaitingRoom = ({ route, navigation }) => {
         visible={showModal}
         onClose={() => setShowModal(false)}
         username={username}
+        results={route.params?.results}
       />
     </SafeAreaView>
   );

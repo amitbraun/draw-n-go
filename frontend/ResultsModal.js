@@ -1,38 +1,33 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import styles from './styles';
 
-const ResultsModal = ({ visible, onClose, username }) => {
-  // Dummy results data
-  const results = [
-    { username: "Alice", score: 12 },
-    { username: "Bob", score: 9 },
-    { username: "Charlie", score: 7 },
-  ];
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={{
-        flex: 1,
-        backgroundColor: 'rgba(28,28,30,0.75)',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}>
-        <View style={[styles.middlePlaceholder, { width: 340, padding: 24 }]}>
-          <Text style={styles.title}>Game Results</Text>
-          <Text style={styles.placeholderText}>
-            Thanks for playing, <Text style={{ fontWeight: 'bold', color: '#4FD1C5' }}>{username}</Text>!
+const ResultsModal = ({ visible, onClose, username, results = [], calculating }) => (
+  <Modal
+    visible={visible}
+    transparent
+    animationType="fade"
+    onRequestClose={onClose}
+  >
+    <View style={{
+      flex: 1,
+      backgroundColor: 'rgba(28,28,30,0.75)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    }}>
+      <View style={[styles.middlePlaceholder, { width: 340, padding: 24 }]}>
+        <Text style={styles.title}>Game Results</Text>
+        <Text style={styles.placeholderText}>
+          Thanks for playing, <Text style={{ fontWeight: 'bold', color: '#4FD1C5' }}>{username}</Text>!
+        </Text>
+        <View style={[styles.actionContainer, { marginTop: 18 }]}>
+          <Text style={{ color: '#A1A1AA', fontSize: 18, marginBottom: 12, fontWeight: 'bold' }}>
+            Players & Scores
           </Text>
-          <View style={[styles.actionContainer, { marginTop: 18 }]}>
-            <Text style={{ color: '#A1A1AA', fontSize: 18, marginBottom: 12, fontWeight: 'bold' }}>
-              Players & Scores
-            </Text>
-            {results.map((player, idx) => (
+          {calculating ? (
+            <ActivityIndicator size="large" color="#4FD1C5" style={{ marginVertical: 20 }} />
+          ) : results && results.length > 0 ? (
+            results.map((player, idx) => (
               <View
                 key={player.username}
                 style={{
@@ -51,18 +46,22 @@ const ResultsModal = ({ visible, onClose, username }) => {
                   {player.score}
                 </Text>
               </View>
-            ))}
-          </View>
+            ))
+          ) : (
+            <Text style={styles.placeholderText}>No results available.</Text>
+          )}
+        </View>
+        {!calculating && (
           <TouchableOpacity
             style={[styles.button, { marginTop: 24 }]}
             onPress={onClose}
           >
             <Text style={styles.buttonText}>Close</Text>
           </TouchableOpacity>
-        </View>
+        )}
       </View>
-    </Modal>
-  );
-};
+    </View>
+  </Modal>
+);
 
 export default ResultsModal;

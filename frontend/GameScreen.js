@@ -3,6 +3,8 @@ import { View, Text, SafeAreaView, TouchableOpacity } from 'react-native';
 import * as Location from 'expo-location';
 import styles from './styles';
 import PainterMap from './PainterMap.web.jsx';
+import { scoreWalkVsTemplate } from './ScoreCalculator';
+import ResultsModal from './ResultsModal';
 
 const FUNCTION_APP_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
 
@@ -45,6 +47,9 @@ const GameScreen = ({ route, navigation }) => {
   const [trails, setTrails] = useState({}); // { user: [{lat,lng},...] }
   const [latestPositions, setLatestPositions] = useState({}); // { user: { latitude, longitude } }
   const [ending, setEnding] = useState(false);
+  const [showResultsModal, setShowResultsModal] = useState(false);
+  const [results, setResults] = useState([]);
+  const [calculating, setCalculating] = useState(false);
 
   // Deterministic colors for users (no color for painter)
   const playerColors = useMemo(() => {
@@ -211,6 +216,9 @@ const GameScreen = ({ route, navigation }) => {
 
   const handleEndGame = async () => {
     setEnding(true);
+    setShowResultsModal(true); // Show modal immediately
+    setCalculating(true);      // Show loading state in modal
+    let scoreResults = [];
     try {
       const endRes = await fetch(`${FUNCTION_APP_ENDPOINT}/api/StartGame`, {
         method: 'POST',
@@ -222,19 +230,47 @@ const GameScreen = ({ route, navigation }) => {
         const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}&t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: data.template || template || null, showResultsModal: true });
+          // Calculate scores for each player (dummy example, adapt as needed)
+          scoreResults = (data.players || []).map(player => {
+            // You need to provide playerLatLon, templateLatLon, elapsedSec for each player
+            // Example:
+            return {
+              username: player.username,
+              score: scoreWalkVsTemplate(player.latLon, data.template.latLon, player.elapsedSec).score
+            };
+          });
+          setResults(scoreResults);
+          setCalculating(false);
+          // Do NOT auto-close modal; wait for user to close
           return;
         }
       } catch {}
-      navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template, showResultsModal: true });
+      setCalculating(false);
     } catch {
+      setCalculating(false);
       setEnding(false);
     }
   };
 
   // Full screen map with overlays
   return (
-    <SafeAreaView style={[styles.safeArea, { flex: 1 }]}>      
+    <SafeAreaView style={[styles.safeArea, { flex: 1 }]}>
+      {/* Results Modal */}
+      <ResultsModal
+        visible={showResultsModal}
+        onClose={() => {
+          setShowResultsModal(false);
+          navigation.replace('WaitingRoom', {
+            sessionId,
+            username,
+            isAdmin,
+            template,
+          });
+        }}
+        username={username}
+        results={results}
+        calculating={calculating}
+      />
       <View style={{ flex: 1, position: 'relative' }}>
         {isPainter && template ? (
           <PainterMap
