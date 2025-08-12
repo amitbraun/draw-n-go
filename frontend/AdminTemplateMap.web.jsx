@@ -21,6 +21,9 @@ export default function AdminTemplateMap({
   const [locked, setLocked] = useState(false);
   const [zoom, setZoom] = useState(16);
 
+  const [customVertices, setCustomVertices] = useState([]); // for Polygon template
+  const [prevClearedVertices, setPrevClearedVertices] = useState(null); // backup for clear/undo
+
   const mapRef = useRef(null);
   const onMapLoad = useCallback((map) => { mapRef.current = map; }, []);
 
@@ -202,17 +205,127 @@ export default function AdminTemplateMap({
     }
   }, [hideControls, template]);
 
+  // Reset custom vertices when switching away
+  useEffect(() => {
+    if (templateId !== 'polygon') setCustomVertices([]);
+  }, [templateId]);
+
+  // If incoming template has vertices (custom polygon), load them
+  useEffect(() => {
+    if (template && template.vertices && Array.isArray(template.vertices) && template.templateId === 'polygon') {
+      // Always store vertices; non-admins will render but without markers
+      setCustomVertices(template.vertices.map(v => ({ lat: v.lat, lng: v.lng })));
+      if (!hideControls) setTemplateId('polygon');
+    }
+  }, [template, hideControls]);
+
+  const effectiveVertices = useMemo(() => {
+    if (templateId === 'polygon') return customVertices;
+    if (hideControls && template && template.templateId === 'polygon' && customVertices.length) return customVertices;
+    return vertices; // auto-generated shapes
+  }, [templateId, customVertices, vertices, hideControls, template]);
+
+  // --- map event handlers ---
+  const handleMapClick = useCallback((e) => {
+    if (locked || hideControls) return;
+    if (templateId === 'polygon') {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setCustomVertices(prev => [...prev, { lat, lng }]);
+      if (!center) {
+        setCenter({ lat, lng });
+        setMyRegion({ lat, lng });
+      }
+    } else {
+      setCenter({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+      setMyRegion({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+    }
+  }, [locked, hideControls, templateId, center]);
+
+  const removeLastVertex = useCallback(() => {
+    if (locked || hideControls || templateId !== 'polygon') return;
+    if (customVertices.length === 0 && prevClearedVertices) {
+      setCustomVertices(prevClearedVertices);
+      setPrevClearedVertices(null);
+      return;
+    }
+    setCustomVertices(v => v.slice(0, -1));
+  }, [locked, hideControls, templateId, customVertices, prevClearedVertices]);
+
+  const clearPolygon = useCallback(() => {
+    if (locked || hideControls || templateId !== 'polygon') return;
+    if (!customVertices.length) return; // nothing to clear
+    setPrevClearedVertices(customVertices);
+    setCustomVertices([]);
+  }, [locked, hideControls, templateId, customVertices]);
+
+  const handleVertexDrag = (idx, e) => {
+    if (locked || hideControls) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setCustomVertices(prev => prev.map((p, i) => i === idx ? { lat, lng } : p));
+  };
+
+  const generatedOrCustomPolygon = effectiveVertices && effectiveVertices.length >= 3 ? (
+    <Polygon
+      paths={effectiveVertices}
+      options={{ strokeColor: '#21a4d6', fillOpacity: 0, strokeWeight: 2 }}
+    />
+  ) : null;
+
+  const vertexMarkers = templateId === 'polygon' ? customVertices.map((v, i) => (
+    <Marker
+      key={`cv-${i}`}
+      position={v}
+      draggable={!locked && !hideControls}
+      onDragEnd={(e) => handleVertexDrag(i, e)}
+      icon={{
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 5,
+        fillColor: '#21a4d6',
+        fillOpacity: 1,
+        strokeWeight: 1,
+        strokeColor: '#fff'
+      }}
+    />
+  )) : null;
+
   const handleSet = useCallback(() => {
-    if (!templateId || !center) return;
+    if (!templateId) return;
+    // For polygon, derive center (centroid) and approximate radius (max distance to centroid in meters)
+    let finalCenter = center;
+    let finalRadius = radius;
+    let verticesToSend = undefined;
+    if (templateId === 'polygon' && customVertices.length >= 3) {
+      const lats = customVertices.map(p => p.lat);
+      const lngs = customVertices.map(p => p.lng);
+      const centroid = { lat: lats.reduce((a,b)=>a+b,0)/lats.length, lng: lngs.reduce((a,b)=>a+b,0)/lngs.length };
+      finalCenter = centroid;
+      // Rough radius: max haversine distance from centroid
+      const toRad = d => d * Math.PI / 180;
+      const R = 6371000;
+      let maxD = 0;
+      customVertices.forEach(p => {
+        const dLat = toRad(p.lat - centroid.lat);
+        const dLng = toRad(p.lng - centroid.lng);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(centroid.lat))*Math.cos(toRad(p.lat))*Math.sin(dLng/2)**2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const d = R * c;
+        if (d > maxD) maxD = d;
+      });
+      finalRadius = Math.max(10, Math.round(maxD));
+      verticesToSend = customVertices;
+    }
+    if (!finalCenter) return;
     setLocked(true);
     onConfirm?.({
       templateId,
-      center,
-      radiusMeters: radius,
-      vertices,
+      center: finalCenter,
+      radiusMeters: finalRadius,
+      vertices: verticesToSend,
       zoomLevel: zoom,
     });
-  }, [templateId, center, radius, vertices, onConfirm, zoom]);
+  }, [templateId, center, radius, customVertices, onConfirm, zoom]);
 
   const handleEdit = useCallback(() => setLocked(false), []);
 
@@ -274,39 +387,68 @@ export default function AdminTemplateMap({
             <option value="triangle">Triangle</option>
             <option value="circle">Circle</option>
             <option value="star">Star</option>
+            <option value="polygon">Polygon</option>
           </select>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              disabled={locked}
-              onClick={() => bumpRadius(1 / 1.15)}
-              style={{
-                background: locked ? "#ccc" : "#fff",
-                border: "1px solid #21a4d6",
-                padding: "6px 10px",
-                borderRadius: 8,
-                color: locked ? "#777" : "#21a4d6",
-                fontWeight: 700,
-                cursor: locked ? "not-allowed" : "pointer",
-              }}
-            >
-              − Size
-            </button>
-            <button
-              disabled={locked}
-              onClick={() => bumpRadius(1.15)}
-              style={{
-                background: locked ? "#ccc" : "#fff",
-                border: "1px solid #21a4d6",
-                padding: "6px 10px",
-                borderRadius: 8,
-                color: locked ? "#777" : "#21a4d6",
-                fontWeight: 700,
-                cursor: locked ? "not-allowed" : "pointer",
-              }}
-            >
-              + Size
-            </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                disabled={locked || templateId === 'polygon'}
+                onClick={() => bumpRadius(1 / 1.15)}
+                style={{
+                  background: (locked || templateId === 'polygon') ? '#ccc' : '#fff',
+                  border: '1px solid #21a4d6',
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  color: (locked || templateId === 'polygon') ? '#777' : '#21a4d6',
+                  fontWeight: 700,
+                  cursor: (locked || templateId === 'polygon') ? 'not-allowed' : 'pointer',
+                }}
+              >− Size</button>
+              <button
+                disabled={locked || templateId === 'polygon'}
+                onClick={() => bumpRadius(1.15)}
+                style={{
+                  background: (locked || templateId === 'polygon') ? '#ccc' : '#fff',
+                  border: '1px solid #21a4d6',
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  color: (locked || templateId === 'polygon') ? '#777' : '#21a4d6',
+                  fontWeight: 700,
+                  cursor: (locked || templateId === 'polygon') ? 'not-allowed' : 'pointer',
+                }}
+              >+ Size</button>
+            </div>
+            {templateId === 'polygon' && !locked && (
+              <>
+                <button
+                  onClick={removeLastVertex}
+                  style={{
+                    background: (customVertices.length || prevClearedVertices) ? '#ff9800' : '#ccc',
+                    color: '#fff',
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    cursor: (customVertices.length || prevClearedVertices) ? 'pointer' : 'not-allowed'
+                  }}
+                  disabled={!(customVertices.length || prevClearedVertices)}
+                  title={customVertices.length === 0 && prevClearedVertices ? 'Restore cleared polygon' : 'Undo last point'}
+                >{customVertices.length === 0 && prevClearedVertices ? 'Restore' : 'Undo Point'}</button>
+                <button
+                  onClick={clearPolygon}
+                  style={{
+                    background: customVertices.length ? '#d9534f' : '#ccc',
+                    color: '#fff',
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    cursor: customVertices.length ? 'pointer' : 'not-allowed'
+                  }}
+                  disabled={!customVertices.length}
+                  title="Clear all points (use Undo to restore)"
+                >Clear</button>
+              </>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -354,21 +496,9 @@ export default function AdminTemplateMap({
         zoom={zoom}
         onLoad={onMapLoad}
         options={{ disableDefaultUI: true, draggable: !locked }}
-        onClick={(e) => {
-          if (!locked && !hideControls) {
-            setCenter({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-            setMyRegion({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-          }
-        }}
-        onCenterChanged={() => {
-          // For admin, allow moving map freely
-          if (!hideControls) {
-            const map = window.google && window.google.maps && window.google.maps.Map ? window.google.maps.Map : null;
-            // No-op: react-google-maps handles this
-          }
-        }}
+        onClick={handleMapClick}
       >
-        {center && (
+        {center && templateId !== 'polygon' && (
           <Marker
             position={center}
             draggable={!locked && !hideControls}
@@ -379,17 +509,8 @@ export default function AdminTemplateMap({
             }}
           />
         )}
-        {vertices.length >= 3 && (
-          <Polygon
-            paths={vertices}
-            options={{
-              strokeColor: "#21a4d6",
-              fillColor: "#21a4d6",
-              fillOpacity: 0,
-              strokeWeight: 2,
-            }}
-          />
-        )}
+        {generatedOrCustomPolygon}
+        {!hideControls && vertexMarkers}
       </GoogleMap>
     </div>
   );

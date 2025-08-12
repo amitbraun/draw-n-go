@@ -85,7 +85,15 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             return func.HttpResponse(json.dumps({"error": f"Corrupt users field: {str(e)}"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
         import random
-        painter = random.choice(users)
+        # Optional explicit painter selection
+        requested_painter = data.get("painter")
+        if requested_painter and requested_painter in users:
+            painter = requested_painter
+            print(f"DEBUG: Using requested painter: {painter}")
+        else:
+            painter = random.choice(users)
+            print(f"DEBUG: Selected random painter: {painter}")
+
         roles = {user: ("Painter" if user == painter else "Brush") for user in users}
 
         game_id = str(uuid.uuid4())
@@ -110,8 +118,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         try:
             session["isStarted"] = True
             session["currentGameId"] = game_id
-            session["roles"] = json.dumps(roles)  # <-- add this line
-            session["painter"] = painter          # <-- add this line
+            session["roles"] = json.dumps(roles)
+            session["painter"] = painter
             session_table.update_entity(session, mode="merge")
         except Exception as e:
             print(f"DEBUG: Failed to update session entity: {str(e)}")

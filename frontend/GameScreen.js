@@ -197,34 +197,36 @@ const GameScreen = ({ route, navigation }) => {
     if (ending) return;
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}`);
+        const response = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}&t=${Date.now()}`, { cache: 'no-store' });
         if (response.ok) {
           const data = await response.json();
-          if (!data.isStarted) navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
+          if (!data.isStarted) {
+            navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: data.template || template || null });
+          }
         }
       } catch {}
     }, 1000);
     return () => clearInterval(interval);
-  }, [ending, sessionId, username, isAdmin, navigation]);
+  }, [ending, sessionId, username, isAdmin, navigation, template]);
 
   const handleEndGame = async () => {
     setEnding(true);
     try {
-      await fetch(`${FUNCTION_APP_ENDPOINT}/api/StartGame`, {
+      const endRes = await fetch(`${FUNCTION_APP_ENDPOINT}/api/StartGame`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, endGame: true }),
       });
-      // Fetch latest session (with template) immediately and pass it back
+      // After ending, fetch fresh session (cache-busted) to capture template & state
       try {
-        const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}`, { cache: 'no-store' });
+        const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}&t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          navigation.replace('WaitingRoom', { sessionId, username, isAdmin, /* pass fresh template */ template: data.template || null });
+          navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: data.template || template || null });
           return;
         }
       } catch {}
-      navigation.replace('WaitingRoom', { sessionId, username, isAdmin });
+      navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: template || null });
     } catch {
       setEnding(false);
     }

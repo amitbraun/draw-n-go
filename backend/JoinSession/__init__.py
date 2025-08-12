@@ -47,11 +47,18 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     center = json.loads(session["templateCenter"])
                 except Exception:
                     center = session["templateCenter"]
+                vertices = None
+                if session.get("templateVertices"):
+                    try:
+                        vertices = json.loads(session["templateVertices"])
+                    except Exception:
+                        vertices = session["templateVertices"]
                 template = {
                     "templateId": session["templateId"],
                     "center": center,
                     "radiusMeters": session["templateRadiusMeters"],
-                    "zoomLevel": session.get("templateZoom")
+                    "zoomLevel": session.get("templateZoom"),
+                    "vertices": vertices
                 }
             # Include defaultCenter for non-admin initial map centering
             default_center = None
@@ -134,6 +141,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 center = data.get("center")
                 radius = data.get("radiusMeters")
                 zoom = data.get("zoomLevel")
+                vertices = data.get("vertices")
                 if not (template_id and center and radius):
                     return func.HttpResponse(json.dumps({"error": "Missing templateId, center, or radiusMeters"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
                 session["templateId"] = template_id
@@ -141,6 +149,10 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 session["templateRadiusMeters"] = radius
                 if zoom is not None:
                     session["templateZoom"] = zoom
+                if vertices and isinstance(vertices, list):
+                    session["templateVertices"] = json.dumps(vertices)
+                else:
+                    session["templateVertices"] = None
                 session_table.update_entity(session, mode="merge")
                 return func.HttpResponse(json.dumps({"message": "Template set"}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
 

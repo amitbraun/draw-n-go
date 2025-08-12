@@ -29,6 +29,7 @@ const WaitingRoom = ({ route, navigation }) => {
   const [signingOut, setSigningOut] = useState(false);
   const [hadNavTemplate, setHadNavTemplate] = useState(!!navTemplate);
   const setDefaultCenterAttempted = useRef(false);
+  const [selectedPainter, setSelectedPainter] = useState('random');
 
   const fetchGameEntity = async (gameId) => {
     try {
@@ -81,7 +82,8 @@ const WaitingRoom = ({ route, navigation }) => {
     }
     try {
       const response = await fetch(
-        `https://draw-n-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}`
+        `https://draw-n-go.azurewebsites.net/api/JoinSession?sessionId=${sessionId}&t=${Date.now()}`,
+        { cache: 'no-store' }
       );
       if (!response.ok) {
         let errorMsg = 'Unknown error';
@@ -111,32 +113,42 @@ const WaitingRoom = ({ route, navigation }) => {
       }
       const data = await response.json();
       if (signingOut) return; // Do nothing if we're signing out
-      setUsers(data.users || []);
+      setUsers(prevUsers => {
+        // If user list changes length, reset painter selection if current selection disappeared
+        if (selectedPainter !== 'random' && !data.users.includes(selectedPainter)) {
+          setSelectedPainter('random');
+        }
+        return data.users || [];
+      });
       setReadyStatus(data.readyStatus || {});
       setCreator(data.creator || "");
       setErrorMsg("");
       setLoading(false);
       setDefaultCenter(data.defaultCenter || null);
-      // Use backend template unless we had a navTemplate that disappears briefly; prefer non-null
-      if (data.template) {
-        setTemplate(data.template);
-        setHadNavTemplate(false);
-      } else if (!data.template && hadNavTemplate && navTemplate) {
-        // keep the nav template to avoid flicker right after end
-        setTemplate(navTemplate);
-      } else {
-        setTemplate(data.template || null);
-      }
+      setTemplate(prevTemplate => {
+        if (data.template) {
+          setHadNavTemplate(false);
+          return data.template;
+        }
+        if (!data.template && prevTemplate && !data.isStarted) {
+          // retain previous template during transient gap after game end
+          return prevTemplate;
+        }
+        if (!data.template && hadNavTemplate && navTemplate) {
+          return navTemplate;
+        }
+        return data.template || null;
+      });
       if (data.isStarted && data.currentGameId) {
         navigation.navigate('Game', {
           sessionId,
-          gameId: data.currentGameId,
+            gameId: data.currentGameId,
           users: data.users,
           roles: data.roles,
           painter: data.painter,
           username,
           isAdmin,
-          template: data.template || null
+          template: data.template || template || null
         });
       }
     } catch (err) {
@@ -185,8 +197,8 @@ const WaitingRoom = ({ route, navigation }) => {
       const response = await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-username': username,
+            'Content-Type': 'application/json',
+            'x-username': username,
         },
         body: JSON.stringify({
           sessionId,
@@ -223,10 +235,14 @@ const WaitingRoom = ({ route, navigation }) => {
     }
     setStartError("");
     try {
+      const payload = { sessionId };
+      if (selectedPainter && selectedPainter !== 'random') {
+        payload.painter = selectedPainter;
+      }
       const response = await fetch('https://draw-n-go.azurewebsites.net/api/StartGame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         let errorMsg = 'Failed to start game.';
@@ -244,23 +260,27 @@ const WaitingRoom = ({ route, navigation }) => {
   };
 
   // Admin sets the template (calls JoinSession POST with template info)
-  const handleTemplateConfirm = async ({ templateId, center, radiusMeters, zoomLevel }) => {
+  const handleTemplateConfirm = async ({ templateId, center, radiusMeters, zoomLevel, vertices }) => {
     try {
       setTemplateMsg('Saving template…');
+      const payload = {
+        sessionId,
+        setTemplate: true,
+        templateId,
+        center,
+        radiusMeters,
+        zoomLevel,
+      };
+      if (templateId === 'polygon' && Array.isArray(vertices)) {
+        payload.vertices = vertices; // forward polygon vertices to backend
+      }
       const res = await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-username': username,
         },
-        body: JSON.stringify({
-          sessionId,
-          setTemplate: true,
-          templateId,
-          center,
-          radiusMeters,
-          zoomLevel,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.text();
@@ -340,6 +360,21 @@ const WaitingRoom = ({ route, navigation }) => {
             >
               <Text style={[styles.buttonText, { fontSize: 14 }]}>Start</Text>
             </TouchableOpacity>
+          )}
+          {isAdmin && (
+            <View style={{ marginTop: 8, backgroundColor: 'rgba(255,255,255,0.92)', padding: 8, borderRadius: 8 }}>
+              <Text style={{ fontWeight: '600', marginBottom: 4 }}>Painter:</Text>
+              <select
+                value={selectedPainter}
+                onChange={e => setSelectedPainter(e.target.value)}
+                style={{ padding: 6, borderRadius: 6, borderWidth: 1, borderColor: '#21a4d6', minWidth: 140 }}
+              >
+                <option value='random'>Random</option>
+                {users.map(u => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+            </View>
           )}
 
           <TouchableOpacity

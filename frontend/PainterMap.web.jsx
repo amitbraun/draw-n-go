@@ -42,7 +42,11 @@ export default function PainterMap({
   const metersToDegLng = (m, lat) => m / (111_320 * Math.cos((lat * Math.PI) / 180));
 
   const vertices = useMemo(() => {
-    if (!center || !templateId || !radius) return [];
+    if (!center || !templateId) return [];
+    if (templateId === 'polygon' && template?.vertices && Array.isArray(template.vertices)) {
+      return template.vertices.map(v => ({ lat: v.lat, lng: v.lng }));
+    }
+    if (!radius) return [];
     const { lat, lng } = center;
     const dLat = metersToDegLat(radius);
     const dLng = metersToDegLng(radius, lat);
@@ -86,7 +90,7 @@ export default function PainterMap({
       return points;
     }
     return [];
-  }, [center, radius, templateId]);
+  }, [center, radius, templateId, template]);
 
   const fitToShape = () => {
     if (!mapRef.current || !vertices || vertices.length === 0) return;
