@@ -52,6 +52,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 item["innerRatio"] = e.get("innerRatio")
             if e.get("hasCustomVertices") is not None:
                 item["hasCustomVertices"] = e.get("hasCustomVertices")
+            if e.get("isCustom") is not None:
+                item["isCustom"] = e.get("isCustom")
             items.append(item)
 
         return func.HttpResponse(json.dumps({"templates": items}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})

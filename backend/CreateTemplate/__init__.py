@@ -57,7 +57,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         'PartitionKey': 'template',
         'RowKey': template_id,
         'displayName': template_id.capitalize(),
-        'baseVertices': json.dumps(base_vertices)
+        'baseVertices': json.dumps(base_vertices),
+        'isCustom': True  # mark newly created templates as custom (deletable)
     }
     try:
         table.create_entity(entity)

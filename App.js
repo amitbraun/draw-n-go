@@ -12,6 +12,7 @@ import WaitingRoom from './frontend/WaitingRoom';
 import GameScreen from './frontend/GameScreen';
 import PlayerPage from './frontend/PlayerPage';
 import NewTemplateCreator from './frontend/NewTemplateCreator.web.jsx';
+import TemplatesGallery from './frontend/TemplatesGallery.web.jsx';
 
 const Stack = createNativeStackNavigator();
 let clientId = uuidv4();
@@ -75,6 +76,11 @@ export default function App() {
         <Stack.Screen
           name="CreateTemplate"
           component={NewTemplateCreator}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Templates"
+          component={TemplatesGallery}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

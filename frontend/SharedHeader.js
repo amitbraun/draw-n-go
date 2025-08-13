@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import styles from './styles';
 
-const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut = false, onCreateTemplate }) => (
+const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut = false }) => (
   <View style={{
     flexDirection: 'row',
     alignItems: 'center',
@@ -28,16 +28,9 @@ const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut =
           />
         </TouchableOpacity>
       )}
-      {username === 'admin' && onCreateTemplate && (
-        <TouchableOpacity onPress={onCreateTemplate} style={{ marginLeft: 12 }}>
-          <Text style={{ color: '#fff', fontWeight: '600' }}>Create New Template</Text>
-        </TouchableOpacity>
-      )}
-      {username === 'admin' && !onCreateTemplate && (
-        <TouchableOpacity onPress={() => navigation.navigate('CreateTemplate')} style={{ marginLeft: 12 }}>
-          <Text style={{ color: '#fff', fontWeight: '600' }}>Create New Template</Text>
-        </TouchableOpacity>
-      )}
+  <TouchableOpacity onPress={() => navigation.navigate('Templates', { username })} style={{ marginLeft: 12 }}>
+        <Text style={{ color: '#fff', fontWeight: '600' }}>Templates</Text>
+      </TouchableOpacity>
     </View>
     {/* Right: Sign Out */}
     {!hideSignOut && (
