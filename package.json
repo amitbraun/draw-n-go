@@ -2,11 +2,15 @@
   "name": "draw-n-go",
   "version": "1.0.0",
   "main": "expo/AppEntry.js",
+  "homepage": "https://your-permanent-domain.example",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:web": "expo export --platform web",
+    "preview:web": "npx serve dist",
+    "deploy:web": "gh-pages -d dist"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",
@@ -27,7 +31,9 @@
     "@react-google-maps/api": "^2.20.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "gh-pages": "^6.0.0",
+    "serve": "^14.2.1"
   },
   "private": true
 }
