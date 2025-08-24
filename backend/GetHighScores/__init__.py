@@ -87,6 +87,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     'finalScore': r.get('finalScore'),
                     'totalAccuracy': r.get('totalAccuracy'),
                     'players': players,
+                    'hasDrawing': bool(r.get('drawing') or r.get('hasDrawing')),
                 })
             except Exception:
                 continue

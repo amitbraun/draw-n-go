@@ -108,6 +108,19 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                             "templateId": session.get("templateId"),
                         }
 
+                        # Attach template snapshot for future rendering (center, radius, zoom, vertices for polygon)
+                        try:
+                            if session.get("templateCenter"):
+                                score_entity["templateCenter"] = session.get("templateCenter")  # already JSON string
+                            if session.get("templateRadiusMeters") is not None:
+                                score_entity["templateRadiusMeters"] = session.get("templateRadiusMeters")
+                            if session.get("templateZoom") is not None:
+                                score_entity["templateZoom"] = session.get("templateZoom")
+                            if session.get("templateVertices"):
+                                score_entity["templateVertices"] = session.get("templateVertices")  # JSON string of vertices
+                        except Exception as e:
+                            print(f"DEBUG: Failed to attach template snapshot: {str(e)}")
+
                         # Attach totals from results.team
                         try:
                             team_res = results.get("team") if isinstance(results, dict) else None
@@ -146,6 +159,53 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                             score_entity["players"] = json.dumps(players_list)
                         except Exception as e:
                             print(f"DEBUG: Failed to build players list: {str(e)}")
+
+                        # Optional: attach compact drawing from results.trails (downsample and cap size)
+                        try:
+                            trails = None
+                            if isinstance(results, dict):
+                                trails = results.get("trails") or results.get("drawing") or None
+                            if isinstance(trails, dict) and len(trails) > 0:
+                                # Downsample each user's trail to at most 800 points and total under ~4000
+                                def ds(arr, max_pts=800):
+                                    try:
+                                        n = len(arr)
+                                        if n <= max_pts:
+                                            return arr
+                                        step = max(1, n // max_pts)
+                                        return [arr[i] for i in range(0, n, step)][:max_pts]
+                                    except Exception:
+                                        return arr
+                                compact = {}
+                                total_pts = 0
+                                for uname, pts in trails.items():
+                                    if not isinstance(pts, list) or len(pts) == 0:
+                                        continue
+                                    # Normalize to {latitude, longitude}
+                                    norm = []
+                                    for p in pts:
+                                        try:
+                                            lat = p.get("latitude") if isinstance(p, dict) else None
+                                            lng = p.get("longitude") if isinstance(p, dict) else None
+                                            if lat is None and isinstance(p, dict) and "lat" in p:
+                                                lat = p["lat"]
+                                            if lng is None and isinstance(p, dict) and "lng" in p:
+                                                lng = p["lng"]
+                                            if lat is None or lng is None:
+                                                continue
+                                            norm.append({"latitude": float(lat), "longitude": float(lng)})
+                                        except Exception:
+                                            continue
+                                    norm = ds(norm, 800)
+                                    compact[uname] = norm
+                                    total_pts += len(norm)
+                                    if total_pts > 4000:
+                                        break
+                                if compact:
+                                    score_entity["drawing"] = json.dumps({"trails": compact})
+                                    score_entity["hasDrawing"] = True
+                        except Exception as e:
+                            print(f"DEBUG: Failed to attach drawing: {str(e)}")
 
                         # Optional: attach friendly template name
                         try:

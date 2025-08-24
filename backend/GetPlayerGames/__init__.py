@@ -79,6 +79,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     'totalAccuracy': r.get('totalAccuracy'),
                     'role': found.get('role'),
                     'accuracy': found.get('accuracy'),
+                    'hasDrawing': bool(r.get('drawing') or r.get('hasDrawing')),
                 }
                 items.append(item)
             except Exception:

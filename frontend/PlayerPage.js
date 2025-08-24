@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaView, View, Text, FlatList, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import styles from './styles';
 import SharedHeader from './SharedHeader';
+// Drawing feature removed
 
 const FUNCTION_APP_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
 
@@ -13,6 +14,7 @@ const PlayerPage = ({ route, navigation }) => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 10;
+  // No drawing modal/state
 
   // Fetch latest games for the player
   useEffect(() => {
@@ -48,17 +50,19 @@ const PlayerPage = ({ route, navigation }) => {
 
   return (
     <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: '90%', maxWidth: 520, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' }}>
-        <SafeAreaView>
+      <View style={{ width: '92%', maxWidth: 820, height: '80%', backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' }}>
+        <SafeAreaView style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#21a4d6' }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>Player Profile</Text>
-              <View style={{ width: 48 }} />
+              <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Close">
+                <Text style={{ color: '#d9534f', fontWeight: 'bold', fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
             </View>
           </View>
-          <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
+          <View style={{ paddingHorizontal: 16, paddingVertical: 16, flex: 1 }}>
             <Text style={styles.placeholderText}>Username: {displayName}</Text>
-            <View style={{ marginTop: 16 }}>
+            <View style={{ marginTop: 16, flex: 1, overflow: Platform.OS === 'web' ? 'auto' : 'hidden' }}>
               <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Latest Games:</Text>
               {loading ? (
                 <ActivityIndicator size="large" color="#21a4d6" />
@@ -103,6 +107,8 @@ const PlayerPage = ({ route, navigation }) => {
                         <Text style={{ color: '#888', marginTop: 4, fontSize: 12 }}>Game ID: {item.gameId} · Date: {item.date}</Text>
                       </View>
                     )}
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 24 }}
                   />
                   {/* Pagination controls */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -123,15 +129,11 @@ const PlayerPage = ({ route, navigation }) => {
                 </>
               )}
             </View>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: '#d9534f', alignSelf: 'center', marginTop: 16 }]}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.buttonText}>Close</Text>
-            </TouchableOpacity>
+            {/* Footer close removed; use top-right X */}
           </View>
         </SafeAreaView>
       </View>
+  {/* Drawing modal removed */}
     </View>
   );
 };
