@@ -70,9 +70,104 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                                 if "accuracyPct" in team: game["teamF1"] = float(team.get("accuracyPct"))
                         except Exception as e:
                             print(f"DEBUG: Failed to serialize results: {str(e)}")
+                    # Mark game completed and stamp end time
+                    end_iso = datetime.utcnow().isoformat() + "Z"
                     game["status"] = "completed"
-                    game["timeCompleted"] = datetime.utcnow().isoformat() + "Z"
+                    game["timeCompleted"] = end_iso
                     games_table.update_entity(game, mode="merge")
+
+                    # Persist a Scores row for hi-scores/personal history
+                    try:
+                        scores_table = TableClient.from_connection_string(connection_string, table_name="Scores")
+                        try:
+                            scores_table.create_table()
+                        except Exception:
+                            pass
+
+                        # Compute duration
+                        duration_sec = None
+                        try:
+                            t0_iso = game.get("timeStarted")
+                            if t0_iso:
+                                ts = t0_iso.rstrip("Z")
+                                te = end_iso.rstrip("Z")
+                                t0 = datetime.fromisoformat(ts)
+                                t1 = datetime.fromisoformat(te)
+                                duration_sec = int((t1 - t0).total_seconds())
+                        except Exception:
+                            duration_sec = None
+
+                        # Build base entity
+                        score_entity = {
+                            "PartitionKey": "score",
+                            "RowKey": str(game_id),
+                            "gameId": str(game_id),
+                            "sessionId": session_id,
+                            "timeCompleted": end_iso,
+                            **({"timePlayedSec": duration_sec} if duration_sec is not None else {}),
+                            "templateId": session.get("templateId"),
+                        }
+
+                        # Attach totals from results.team
+                        try:
+                            team_res = results.get("team") if isinstance(results, dict) else None
+                            if isinstance(team_res, dict):
+                                if team_res.get("points") is not None:
+                                    score_entity["finalScore"] = int(team_res.get("points"))
+                                if team_res.get("adjustedPct") is not None:
+                                    score_entity["totalAccuracy"] = float(team_res.get("adjustedPct"))
+                        except Exception:
+                            pass
+
+                        # Players: role for each, and accuracy if Brush
+                        try:
+                            roles_map = {}
+                            try:
+                                roles_map = json.loads(game.get("roles", "{}") or "{}")
+                            except Exception:
+                                roles_map = {}
+                            per_user = (results or {}).get("perUser") if isinstance(results, dict) else None
+                            brush_acc = {}
+                            if isinstance(per_user, list):
+                                for entry in per_user:
+                                    uname = entry.get("username")
+                                    if uname and entry.get("adjustedPct") is not None:
+                                        try:
+                                            brush_acc[uname] = float(entry.get("adjustedPct"))
+                                        except Exception:
+                                            pass
+                            players_list = []
+                            for uname, role in roles_map.items():
+                                players_list.append({
+                                    "username": uname,
+                                    "role": role,
+                                    **({"accuracy": brush_acc.get(uname)} if role == "Brush" else {"accuracy": None})
+                                })
+                            score_entity["players"] = json.dumps(players_list)
+                        except Exception as e:
+                            print(f"DEBUG: Failed to build players list: {str(e)}")
+
+                        # Optional: attach friendly template name
+                        try:
+                            tpl_id = session.get("templateId")
+                            if tpl_id:
+                                templates_table = TableClient.from_connection_string(connection_string, table_name="Templates")
+                                try:
+                                    tdef = templates_table.get_entity(partition_key="template", row_key=tpl_id)
+                                    if tdef.get("displayName"):
+                                        score_entity["templateName"] = tdef.get("displayName")
+                                except Exception:
+                                    # If polygon isn't stored in Templates table, ignore
+                                    pass
+                        except Exception:
+                            pass
+
+                        try:
+                            scores_table.upsert_entity(score_entity)
+                        except Exception as e:
+                            print(f"DEBUG: Failed to upsert score entity: {str(e)}")
+                    except Exception as e:
+                        print(f"DEBUG: Scores table write failed: {str(e)}")
                 except Exception as e:
                     print(f"DEBUG: Failed to update game entity: {str(e)}")
                     # Continue to update session anyway
