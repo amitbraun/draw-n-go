@@ -15,7 +15,7 @@ const CARD_SIZE = 140; // px square for preview polygon
 const NAME_BAR_HEIGHT = 30; // extra vertical space for name below shape
 const PADDING = 10;
 
-function TemplatePreview({ template, isAdmin, onDelete }) {
+function TemplatePreview({ template, isAdmin, onDelete, onUpdated }) {
   const pointsAttr = useMemo(() => {
     if (!template?.baseVertices || !Array.isArray(template.baseVertices) || template.baseVertices.length < 3) return '';
     // Determine bounds (though normalization should already be around -1..1)
@@ -40,6 +40,26 @@ function TemplatePreview({ template, isAdmin, onDelete }) {
 
   const [hover, setHover] = React.useState(false);
   const deletable = isAdmin && template.isCustom;
+  const [editMult, setEditMult] = React.useState(false);
+  const [mult, setMult] = React.useState(() => {
+    const v = Number(template?.multiplier);
+    return Number.isFinite(v) ? v : 1.0;
+  });
+  const saveMult = async () => {
+    try {
+      const v = parseFloat(mult);
+      if (!Number.isFinite(v) || v <= 0) throw new Error('Enter a positive number');
+      const res = await fetch('https://draw-n-go.azurewebsites.net/api/UpdateTemplate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: template.templateId, multiplier: v })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setEditMult(false);
+      onUpdated?.(template.templateId, { multiplier: v });
+    } catch (e) {
+      alert(e.message || 'Update failed');
+    }
+  };
   return (
     <View
       style={{ width: CARD_SIZE, height: CARD_SIZE + NAME_BAR_HEIGHT, borderRadius: 12, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff', overflow:'hidden', alignItems:'center', justifyContent:'flex-start', position:'relative' }}
@@ -65,6 +85,25 @@ function TemplatePreview({ template, isAdmin, onDelete }) {
       </View>
       <View style={{ height: NAME_BAR_HEIGHT, width: '100%', borderTopWidth:1, borderTopColor:'#eee', alignItems:'center', justifyContent:'center', paddingHorizontal:4 }}>
         <Text numberOfLines={1} style={{ fontSize:12, fontWeight:'600', color:'#333' }}>{template.templateId}</Text>
+      </View>
+      {/* Multiplier row */}
+      <View style={{ position:'absolute', bottom: NAME_BAR_HEIGHT + 0, left:0, right:0, alignItems:'center', paddingBottom:4 }}>
+        {editMult ? (
+          <div style={{ display:'flex', gap:6, alignItems:'center', justifyContent:'center' }}>
+            <input type="number" step="0.05" value={mult}
+              onChange={e=>setMult(e.target.value)}
+              style={{ width:70, padding:4, border:'1px solid #21a4d6', borderRadius:6 }} />
+            <button onClick={saveMult} style={{ background:'#21a4d6', color:'#fff', border:'none', padding:'4px 8px', borderRadius:6, fontWeight:600 }}>Save</button>
+            <button onClick={()=>{ setEditMult(false); setMult(Number(template.multiplier)||1); }} style={{ background:'#aaa', color:'#fff', border:'none', padding:'4px 8px', borderRadius:6 }}>Cancel</button>
+          </div>
+        ) : (
+          <div style={{ display:'flex', gap:6, alignItems:'center', justifyContent:'center' }}>
+            <span style={{ fontSize:12, color:'#333' }}>x{Number(template.multiplier || 1).toFixed(2)}</span>
+            {isAdmin && (
+              <button onClick={()=>setEditMult(true)} style={{ background:'#eee', border:'1px solid #ccc', padding:'2px 6px', borderRadius:6, fontSize:11 }}>Edit</button>
+            )}
+          </div>
+        )}
       </View>
     </View>
   );
@@ -138,6 +177,9 @@ export default function TemplatesGallery({ navigation, route }) {
                 } catch (e) {
                   alert(e.message || 'Delete failed');
                 }
+              }}
+              onUpdated={(id, patch) => {
+                setTemplates(prev => prev.map(tp => tp.templateId === id ? { ...tp, ...patch } : tp));
               }}
             />
           ))}

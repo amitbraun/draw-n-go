@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { GoogleMap, Marker, Polygon, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import Constants from "expo-constants";
 
 export default function AdminTemplateMap({
@@ -285,11 +285,12 @@ export default function AdminTemplateMap({
     setCustomVertices(prev => prev.map((p, i) => i === idx ? { lat, lng } : p));
   };
 
-  const generatedOrCustomPolygon = effectiveVertices && effectiveVertices.length >= 3 ? (
-    <Polygon
-      paths={effectiveVertices}
-      options={{ strokeColor: '#21a4d6', fillOpacity: 0, strokeWeight: 2 }}
-    />
+  const generatedOrCustomPolygon = effectiveVertices && effectiveVertices.length >= (templateId === 'polygon' ? 2 : 3) ? (
+    templateId === 'polygon' ? (
+      <Polyline path={effectiveVertices} options={{ strokeColor: '#21a4d6', strokeWeight: 2 }} />
+    ) : (
+      <Polygon paths={effectiveVertices} options={{ strokeColor: '#21a4d6', fillOpacity: 0, strokeWeight: 2 }} />
+    )
   ) : null;
 
   const vertexMarkers = templateId === 'polygon' ? customVertices.map((v, i) => (

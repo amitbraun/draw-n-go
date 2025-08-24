@@ -61,6 +61,14 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     "zoomLevel": session.get("templateZoom"),
                     "vertices": vertices
                 }
+                # If we can, attach multiplier from Templates table
+                try:
+                    templates_table = TableClient.from_connection_string(connection_string, table_name="Templates")
+                    tdef2 = templates_table.get_entity(partition_key="template", row_key=template["templateId"])
+                    if tdef2.get("multiplier") is not None:
+                        template["multiplier"] = float(tdef2.get("multiplier"))
+                except Exception:
+                    pass
                 # Fallback: if polygon center missing but have vertices, compute centroid
                 if template["templateId"] == 'polygon' and (not template.get("center") or 'lat' not in template['center']) and vertices:
                     try:
@@ -90,6 +98,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                                 base_vertices = None
                         if base_vertices:
                             template["catalogDefinition"] = { "baseVertices": base_vertices }
+                        # Also include difficulty multiplier if present
+                        try:
+                            if tdef.get("multiplier") is not None:
+                                template["multiplier"] = float(tdef.get("multiplier"))
+                        except Exception:
+                            pass
                     except Exception:
                         pass
             # Include defaultCenter for non-admin initial map centering

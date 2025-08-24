@@ -235,6 +235,7 @@ const GameScreen = ({ route, navigation }) => {
           scoreResults = [
             ...metrics.perUser.map(p => ({ username: p.username, score: `${p.adjustedPct}%` })),
             { username: 'Total Accuracy', score: `${metrics.team.adjustedPct}%` },
+            { username: 'Team Points', score: `${metrics.team.points}` },
           ];
           setResults(scoreResults);
           setCalculating(false);

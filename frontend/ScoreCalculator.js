@@ -82,12 +82,13 @@ function resamplePolyline(pointsXY, stepMeters) {
   return out;
 }
 
-function densifyClosedPath(pointsXY, stepMeters) {
-  // add intermediate points along edges to ensure even sampling for coverage checks
+function densifyPath(pointsXY, stepMeters, closed = true) {
+  // Add intermediate points along edges to ensure even sampling for coverage checks
   if (!pointsXY || pointsXY.length < 2) return pointsXY || [];
   const out = [];
   const n = pointsXY.length;
-  for (let i = 0; i < n; i++) {
+  const maxIdx = closed ? n : n - 1;
+  for (let i = 0; i < maxIdx; i++) {
     const a = pointsXY[i];
     const b = pointsXY[(i + 1) % n];
     out.push(a);
@@ -100,6 +101,7 @@ function densifyClosedPath(pointsXY, stepMeters) {
       }
     }
   }
+  if (!closed) out.push(pointsXY[n - 1]);
   return out;
 }
 
@@ -113,7 +115,7 @@ function buildTemplateBoundary(template) {
   const dLng = radius / metersPerDegLng(lat);
 
   // Polygon provided
-  if (id === 'polygon' && Array.isArray(template.vertices) && template.vertices.length >= 3) {
+  if (id === 'polygon' && Array.isArray(template.vertices) && template.vertices.length >= 2) {
     return template.vertices.map(v => ({ lat: Number(v.lat), lng: Number(v.lng) }));
   }
 
@@ -201,7 +203,8 @@ export function scoreWalkVsTemplate(trails, template) {
 
     // Template boundary in XY meters and densified
     const boundaryXY = boundaryLL.map(p => toXYMeters(p, origin));
-    const boundaryClosed = densifyClosedPath(boundaryXY, 2); // 2m spacing
+  const isPoly = template && template.templateId === 'polygon';
+  const boundaryPts = densifyPath(boundaryXY, 2, !isPoly); // polygons open, others closed
 
     // Trails merged; convert to XY; resample each trail to 2m steps
     const lines = mergeTrails(trails);
@@ -218,16 +221,16 @@ export function scoreWalkVsTemplate(trails, template) {
 
     // Coverage: template samples close to any trail
     let covered = 0;
-    for (let i = 0; i < boundaryClosed.length; i++) {
-      const d = distancePointToPolylineMeters(boundaryClosed[i], allTrailPoints);
+    for (let i = 0; i < boundaryPts.length; i++) {
+      const d = distancePointToPolylineMeters(boundaryPts[i], allTrailPoints);
       if (d <= tol) covered++;
     }
-    const coverage = covered / boundaryClosed.length;
+    const coverage = covered / boundaryPts.length;
 
     // Precision: trail samples close to template boundary
     let onShape = 0;
     for (let i = 0; i < allTrailPoints.length; i++) {
-      const d = distancePointToPolylineMeters(allTrailPoints[i], boundaryClosed);
+  const d = distancePointToPolylineMeters(allTrailPoints[i], boundaryPts);
       if (d <= tol) onShape++;
     }
     const precision = onShape / allTrailPoints.length;
@@ -251,7 +254,8 @@ export function scorePerUserAndTeam(trails, template, users = null) {
     }
     const origin = template.center || boundaryLL[0];
     const boundaryXY = boundaryLL.map(p => toXYMeters(p, origin));
-    const boundaryClosed = densifyClosedPath(boundaryXY, 2);
+  const isPoly2 = template && template.templateId === 'polygon';
+  const boundaryPts = densifyPath(boundaryXY, 2, !isPoly2);
 
     const usernames = users && Array.isArray(users) && users.length
       ? users
@@ -266,14 +270,14 @@ export function scorePerUserAndTeam(trails, template, users = null) {
       const radius = Number(template.radiusMeters || 50);
       const tol = Math.max(3, Math.min(0.06 * radius, 10));
       let covered = 0;
-      for (let i = 0; i < boundaryClosed.length; i++) {
-        const d = distancePointToPolylineMeters(boundaryClosed[i], allTrailPoints);
+      for (let i = 0; i < boundaryPts.length; i++) {
+        const d = distancePointToPolylineMeters(boundaryPts[i], allTrailPoints);
         if (d <= tol) covered++;
       }
-      const coverage = covered / boundaryClosed.length;
+      const coverage = covered / boundaryPts.length;
       let onShape = 0;
       for (let i = 0; i < allTrailPoints.length; i++) {
-        const d = distancePointToPolylineMeters(allTrailPoints[i], boundaryClosed);
+  const d = distancePointToPolylineMeters(allTrailPoints[i], boundaryPts);
         if (d <= tol) onShape++;
       }
       const precision = onShape / allTrailPoints.length;
@@ -298,7 +302,30 @@ export function scorePerUserAndTeam(trails, template, users = null) {
     const allLines = mergeTrails(trails);
     const team = scoreLines(allLines);
 
-    return { perUser, team };
+    // Derive a simple points metric for the results page:
+    // Base points from team adjustedPct scaled by shape difficulty and radius/time/teamSize factors.
+    const shapeId = (template && template.templateId) || 'circle';
+    // Prefer server-provided multiplier if available; fallback to defaults per requirements
+    const difficulty = (template && typeof template.multiplier === 'number')
+      ? Number(template.multiplier)
+      : (
+        shapeId === 'star' ? 1.6 :
+        shapeId === 'square' ? 1.3 :
+        shapeId === 'triangle' ? 1.15 :
+        shapeId === 'circle' ? 1.05 :
+        shapeId === 'polygon' ? 1.0 : 1.0
+      );
+    const radius = Number(template.radiusMeters || 50);
+    const radiusFactor = Math.max(0.8, Math.min(1.5, radius / 100)); // 100m => 1.0, 50m => 0.8, 150m+ => 1.5
+    const teamSize = Math.max(1, Object.keys(trails || {}).length);
+    const teamFactor = 1 + Math.log10(teamSize); // diminishing returns with more brushes
+    // timeSeconds can optionally be attached to template for scoring; default mild factor
+    const timeSec = Number(template.timeSeconds || 60);
+    const timeFactor = Math.max(0.8, Math.min(1.2, 90 / Math.max(30, timeSec)));
+  // Base percentage for points: use total adjusted accuracy (0..100) scaled by 12 => 0..1200
+  const basePct = (team.adjustedPct || 0) * 12;
+    const points = Math.round(basePct * difficulty * radiusFactor * teamFactor * timeFactor);
+    return { perUser, team: { ...team, points } };
   } catch (e) {
     return { perUser: [], team: { accuracyPct: 0, adjustedPct: 0, coverage: 0, precision: 0, f1: 0, error: String(e) } };
   }

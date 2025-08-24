@@ -53,6 +53,14 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         pass
 
+    multiplier = data.get('multiplier')
+    try:
+        multiplier = float(multiplier) if multiplier is not None else None
+        if multiplier is not None and multiplier <= 0:
+            multiplier = None
+    except Exception:
+        multiplier = None
+
     entity = {
         'PartitionKey': 'template',
         'RowKey': template_id,
@@ -60,6 +68,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         'baseVertices': json.dumps(base_vertices),
         'isCustom': True  # mark newly created templates as custom (deletable)
     }
+    if multiplier is not None:
+        entity['multiplier'] = multiplier
     try:
         table.create_entity(entity)
     except Exception as e:

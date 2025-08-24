@@ -105,11 +105,14 @@ export default function PainterMap({
         onLoad={onMapLoad}
         options={{ disableDefaultUI: true, draggable: !disableInteractions }}
       >
-        {vertices.length >= 3 && (
-          <Polygon
-            paths={vertices}
-            options={{ strokeColor: "#21a4d6", fillOpacity: 0, strokeWeight: 2 }}
-          />
+        {templateId === 'polygon' ? (
+          vertices.length >= 2 ? (
+            <Polyline path={vertices} options={{ strokeColor: "#21a4d6", strokeWeight: 2 }} />
+          ) : null
+        ) : (
+          vertices.length >= 3 ? (
+            <Polygon paths={vertices} options={{ strokeColor: "#21a4d6", fillOpacity: 0, strokeWeight: 2 }} />
+          ) : null
         )}
         {Object.entries(trails).map(([user, points]) => {
           if (!points || points.length === 0) return null;

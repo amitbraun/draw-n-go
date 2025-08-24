@@ -25,6 +25,7 @@ export default function NewTemplateCreator({ onClose, onSaved, navigation }) {
   const [success, setSuccess] = useState('');
   const [namePrompt, setNamePrompt] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [multiplier, setMultiplier] = useState(1.0);
 
   const mapRef = useRef(null);
   const onMapLoad = useCallback(m => { mapRef.current = m; }, []);
@@ -87,12 +88,14 @@ export default function NewTemplateCreator({ onClose, onSaved, navigation }) {
       return;
     }
     if (normalizedBase.length < 3) { setError('Normalization failed'); return; }
+  const m = parseFloat(String(multiplier).trim());
+  if (!Number.isFinite(m) || m <= 0) { setError('Enter a positive multiplier'); return; }
     setSaving(true); setError(''); setSuccess('');
     try {
       const res = await fetch(`${FUNCTION_BASE}/CreateTemplate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: templateName, baseVertices: normalizedBase })
+    body: JSON.stringify({ templateId: templateName, baseVertices: normalizedBase, multiplier: m })
       });
       if (!res.ok) {
         const txt = await res.text();
@@ -165,8 +168,8 @@ export default function NewTemplateCreator({ onClose, onSaved, navigation }) {
         </div>
         <span style={{ background:'rgba(255,255,255,0.9)', padding:'4px 8px', borderRadius:8, fontSize:12, fontWeight:600 }}>Vertices: {vertices.length}</span>
         {namePrompt && (
-          <div style={{ background:'rgba(255,255,255,0.95)', padding:12, borderRadius:12, display:'flex', flexDirection:'column', gap:8, alignItems:'flex-end' }}>
-            <div style={{ display:'flex', flexDirection:'row', gap:8, alignItems:'center' }}>
+          <div style={{ background:'rgba(255,255,255,0.95)', padding:12, borderRadius:12, display:'flex', flexDirection:'column', gap:10, alignItems:'stretch', minWidth: 320 }}>
+              <div style={{ display:'flex', flexDirection:'row', gap:8, alignItems:'center', justifyContent:'space-between' }}>
               <label style={{ fontSize:12, fontWeight:600 }}>Template name:</label>
               <input
                 style={{ padding:6, border:'1px solid #21a4d6', borderRadius:6, width:160 }}
@@ -175,12 +178,23 @@ export default function NewTemplateCreator({ onClose, onSaved, navigation }) {
                 placeholder="e.g. heart"
                 disabled={saving}
               />
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                style={{ background:saving? '#ccc':'#21a4d6', color:'#fff', padding:'6px 10px', border:'none', borderRadius:8, fontWeight:600, cursor:saving? 'not-allowed':'pointer' }}
-              >{saving? 'Saving…':'Confirm'}</button>
             </div>
+              <div style={{ display:'flex', flexDirection:'row', gap:8, alignItems:'center', justifyContent:'space-between' }}>
+                <label style={{ fontSize:12, fontWeight:600 }}>Multiplier (difficulty):</label>
+                <input type="number" step="0.05" min="0.1" max="5"
+                  style={{ padding:6, border:'1px solid #21a4d6', borderRadius:6, width:160 }}
+                  value={multiplier}
+                  onChange={e=>setMultiplier(e.target.value)}
+                  disabled={saving}
+                />
+              </div>
+              <div style={{ display:'flex', flexDirection:'row', gap:8, alignItems:'center', justifyContent:'flex-end' }}>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  style={{ background:saving? '#ccc':'#21a4d6', color:'#fff', padding:'6px 10px', border:'none', borderRadius:8, fontWeight:600, cursor:saving? 'not-allowed':'pointer' }}
+                >{saving? 'Saving…':'Confirm'}</button>
+              </div>
             {error && <span style={{ color:'red', fontSize:12 }}>{error}</span>}
             {success && <span style={{ color:'#20b265', fontSize:12 }}>{success}</span>}
           </div>
