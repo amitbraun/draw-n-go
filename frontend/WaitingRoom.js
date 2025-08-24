@@ -26,6 +26,7 @@ const WaitingRoom = ({ route, navigation }) => {
   const [startError, setStartError] = useState("");
   const [templateMsg, setTemplateMsg] = useState("");
   const [template, setTemplate] = useState(navTemplate || null);
+  const [isTemplateSet, setIsTemplateSet] = useState(false);
   const [defaultCenter, setDefaultCenter] = useState(null); // { latitude, longitude }
   const [myLocation, setMyLocation] = useState(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -129,19 +130,18 @@ const WaitingRoom = ({ route, navigation }) => {
       setErrorMsg("");
       setLoading(false);
       setDefaultCenter(data.defaultCenter || null);
+      // Track template set flag; only adopt template when flag true (one-time), else allow admin edit freely
+      setIsTemplateSet(Boolean(data.isTemplateSet));
       setTemplate(prevTemplate => {
-        if (data.template) {
+        if (Boolean(data.isTemplateSet) && data.template) {
           setHadNavTemplate(false);
           return data.template;
         }
-        if (!data.template && prevTemplate && !data.isStarted) {
-          // retain previous template during transient gap after game end
-          return prevTemplate;
+        // When not set, avoid overwriting local edits; keep previous unless navigating in
+        if (!Boolean(data.isTemplateSet)) {
+          return prevTemplate || null;
         }
-        if (!data.template && hadNavTemplate && navTemplate) {
-          return navTemplate;
-        }
-        return data.template || null;
+        return prevTemplate || data.template || null;
       });
       if (data.isStarted && data.currentGameId) {
         navigation.navigate('Game', {
@@ -291,6 +291,7 @@ const WaitingRoom = ({ route, navigation }) => {
         setTemplateMsg(`Failed to save template: ${err}`);
       } else {
         setTemplateMsg('Template set ✅');
+        setIsTemplateSet(true); // lock clients
         fetchSession();
       }
     } catch (e) {
@@ -328,6 +329,8 @@ const WaitingRoom = ({ route, navigation }) => {
           template={template}
           hideControls={!isAdmin}
           height={'100%'}
+          sessionId={sessionId}
+          username={username}
         />
 
         {/* Overlay: top-left players list with ready status */}

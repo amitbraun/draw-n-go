@@ -9,7 +9,9 @@ export default function AdminTemplateMap({
   hideControls = false,
   initialCenter,
   height = '100%',
-  defaultCenter
+  defaultCenter,
+  sessionId,
+  username
 }) {
   const [loading, setLoading] = useState(true);
   const [myRegion, setMyRegion] = useState(null);
@@ -363,7 +365,19 @@ export default function AdminTemplateMap({
     });
   }, [templateId, center, radius, customVertices, onConfirm, zoom]);
 
-  const handleEdit = useCallback(() => setLocked(false), []);
+  const handleEdit = useCallback(async () => {
+    setLocked(false);
+    // Best-effort: signal session that template is not set to prevent polling overwrite
+    try {
+      if (sessionId && username) {
+        await fetch('https://draw-n-go.azurewebsites.net/api/JoinSession', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-username': username },
+          body: JSON.stringify({ sessionId, templateSet: false })
+        });
+      }
+    } catch {}
+  }, []);
 
   const fitToShape = useCallback(() => {
     // For polygon while editing (unlocked), keep current zoom & center stable

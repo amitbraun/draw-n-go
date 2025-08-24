@@ -119,6 +119,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     "readyStatus": ready_status,
                     "creator": session.get("creator", ""),
                     "isStarted": session.get("isStarted", False),
+                    "isTemplateSet": session.get("isTemplateSet", False),
                     "currentGameId": session.get("currentGameId"),
                     "roles": json.loads(session.get("roles", "{}")) if session.get("roles") else {},
                     "painter": session.get("painter", ""),
@@ -141,6 +142,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             set_ready = data.get("setReady", False)
             leave = data.get("leave", False)
             set_template = data.get("setTemplate", False)
+            # New: explicitly toggle template set state (admin only)
+            template_set_flag = data.get("templateSet") if "templateSet" in data else None
             set_default_center = data.get("setDefaultCenter", False)
 
             # Resolve session
@@ -249,8 +252,18 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 else:
                     session["templateVertices"] = None
 
+                # Mark template as set (locked for polling)
+                session["isTemplateSet"] = True
                 session_table.update_entity(session, mode="merge")
-                return func.HttpResponse(json.dumps({"message": "Template set"}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
+                return func.HttpResponse(json.dumps({"message": "Template set", "isTemplateSet": True}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
+
+            # === Handle explicit templateSet toggle (admin only) ===
+            if template_set_flag is not None:
+                if username != session.get("creator"):
+                    return func.HttpResponse(json.dumps({"error": "Only admin can toggle template set"}), status_code=403, headers={**cors_headers, "Content-Type": "application/json"})
+                session["isTemplateSet"] = bool(template_set_flag)
+                session_table.update_entity(session, mode="merge")
+                return func.HttpResponse(json.dumps({"message": "Template set flag updated", "isTemplateSet": bool(template_set_flag)}), status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
 
             # === Handle leave request ===
             if leave:
