@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, SafeAreaView, TouchableOpacity, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import styles from './styles';
 import PainterMap from './PainterMap.web.jsx';
@@ -69,38 +69,113 @@ const GameScreen = ({ route, navigation }) => {
   useEffect(() => {
     if (!isBrush) return;
     let sub;
+    let tick;
+    const lastLocRef = { current: null };
+    const lastPostRef = { current: 0 };
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
-      try {
-        const loc0 = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
-        await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, gameId, location: { latitude: loc0.coords.latitude, longitude: loc0.coords.longitude, timestamp: Date.now() } })
-        });
-      } catch {}
-      try {
-        sub = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.BestForNavigation,
-            distanceInterval: 1, // 1m granularity
-            timeInterval: 500,   // was 1000ms -> 500ms for higher temporal resolution
-          },
-          async (loc) => {
+
+      // Web: use navigator.geolocation for better control on mobile browsers
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
+        const opts = { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 };
+        // Initial fix
+        try {
+          await new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+              async (pos) => {
+                const { latitude, longitude } = pos.coords || {};
+                lastLocRef.current = { latitude, longitude };
+                try {
+                  await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, gameId, location: { latitude, longitude, timestamp: pos.timestamp || Date.now() } })
+                  });
+                  lastPostRef.current = Date.now();
+                } catch {}
+                resolve();
+              },
+              () => resolve(),
+              opts
+            );
+          });
+        } catch {}
+        // Continuous watch
+        const wid = navigator.geolocation.watchPosition(
+          async (pos) => {
             try {
+              const { latitude, longitude } = pos.coords || {};
+              lastLocRef.current = { latitude, longitude };
               await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   username, gameId,
-                  location: { latitude: loc.coords.latitude, longitude: loc.coords.longitude, timestamp: Date.now() }
+                  location: { latitude, longitude, timestamp: pos.timestamp || Date.now() }
                 })
               });
+              lastPostRef.current = Date.now();
             } catch {}
-          }
+          },
+          () => {},
+          opts
         );
-      } catch {}
+        sub = { remove: () => { try { navigator.geolocation.clearWatch(wid); } catch {} } };
+      } else {
+        // Native / non-web: use expo-location
+        try {
+          const loc0 = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
+          lastLocRef.current = { latitude: loc0.coords.latitude, longitude: loc0.coords.longitude };
+          await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, gameId, location: { latitude: loc0.coords.latitude, longitude: loc0.coords.longitude, timestamp: Date.now() } })
+          });
+          lastPostRef.current = Date.now();
+        } catch {}
+        try {
+          sub = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.BestForNavigation,
+              distanceInterval: 0,
+              timeInterval: 250,
+            },
+            async (loc) => {
+              try {
+                lastLocRef.current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+                await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    username, gameId,
+                    location: { latitude: loc.coords.latitude, longitude: loc.coords.longitude, timestamp: Date.now() }
+                  })
+                });
+                lastPostRef.current = Date.now();
+              } catch {}
+            }
+          );
+        } catch {}
+      }
+
+      // Periodic sender to ensure updates are sent even if OS/browser throttles callbacks
+      tick = setInterval(async () => {
+        try {
+          const now = Date.now();
+          if (lastLocRef.current && now - lastPostRef.current >= 300) {
+            await fetch(`${FUNCTION_APP_ENDPOINT}/api/sendLocation`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username, gameId,
+                location: { latitude: lastLocRef.current.latitude, longitude: lastLocRef.current.longitude, timestamp: now }
+              })
+            });
+            lastPostRef.current = now;
+          }
+        } catch {}
+      }, 300);
     })();
-    return () => { try { sub && sub.remove(); } catch {} };
+    return () => {
+      try { sub && sub.remove(); } catch {}
+      try { tick && clearInterval(tick); } catch {}
+    };
   }, [isBrush, username, gameId]);
 
   // On mount (painter): seed trails once with initial locations so dots appear immediately

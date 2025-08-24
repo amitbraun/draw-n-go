@@ -117,16 +117,11 @@ export default function PainterMap({
         {Object.entries(trails).map(([user, points]) => {
           if (!points || points.length === 0) return null;
           const color = playerColors[user] || "#ff6600";
-          const uniquePoints = [];
-          for (let i = 0; i < points.length; i++) {
-            const p = points[i];
-            const last = uniquePoints[uniquePoints.length - 1];
-            if (!last || last.latitude !== p.latitude || last.longitude !== p.longitude) {
-              uniquePoints.push(p);
-            }
-          }
-          if (uniquePoints.length === 1) {
-            const p = uniquePoints[0];
+
+          // Use all points as-is (no dedupe) to preserve high-frequency updates, even if repeated
+          const pts = points;
+          if (pts.length === 1) {
+            const p = pts[0];
             // Single small forward arrow anchored to same point (degenerate direction)
             return (
               <Polyline
@@ -152,36 +147,73 @@ export default function PainterMap({
               />
             );
           }
-          const path = uniquePoints.map(p => ({ lat: p.latitude, lng: p.longitude }));
-          const head = uniquePoints[uniquePoints.length - 1];
-          const prev = uniquePoints[uniquePoints.length - 2];
+
+          const path = pts.map(p => ({ lat: p.latitude, lng: p.longitude }));
+          const head = pts[pts.length - 1];
+          // Find previous point that is different to ensure a visible arrow head
+          let prevIdx = pts.length - 2;
+          while (
+            prevIdx >= 0 &&
+            pts[prevIdx] &&
+            head &&
+            pts[prevIdx].latitude === head.latitude &&
+            pts[prevIdx].longitude === head.longitude
+          ) {
+            prevIdx--;
+          }
+          const prev = prevIdx >= 0 ? pts[prevIdx] : null;
+
           return (
             <React.Fragment key={`trail-${user}`}>
               <Polyline
                 path={path}
                 options={{ strokeColor: color, strokeWeight: 4, strokeOpacity: 0.9 }}
               />
-              {window.google && window.google.maps && prev && head && (
-                <Polyline
-                  path={[{ lat: prev.latitude, lng: prev.longitude }, { lat: head.latitude, lng: head.longitude }]}
-                  options={{
-                    strokeOpacity: 0,
-                    icons: [
-                      {
-                        icon: {
-                          path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                          scale: 2,
-                          strokeColor: color,
-                          strokeOpacity: 1,
-                          strokeWeight: 2,
-                          fillColor: color,
-                          fillOpacity: 1,
+              {window.google && window.google.maps && head && (
+                prev ? (
+                  <Polyline
+                    path={[{ lat: prev.latitude, lng: prev.longitude }, { lat: head.latitude, lng: head.longitude }]}
+                    options={{
+                      strokeOpacity: 0,
+                      icons: [
+                        {
+                          icon: {
+                            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                            scale: 2,
+                            strokeColor: color,
+                            strokeOpacity: 1,
+                            strokeWeight: 2,
+                            fillColor: color,
+                            fillOpacity: 1,
+                          },
+                          offset: '100%',
                         },
-                        offset: '100%',
-                      },
-                    ],
-                  }}
-                />
+                      ],
+                    }}
+                  />
+                ) : (
+                  // Fallback if all points are identical: draw a tiny arrow stub
+                  <Polyline
+                    path={[{ lat: head.latitude, lng: head.longitude }, { lat: head.latitude + 1e-7, lng: head.longitude + 1e-7 }]}
+                    options={{
+                      strokeOpacity: 0,
+                      icons: [
+                        {
+                          icon: {
+                            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                            scale: 2,
+                            strokeColor: color,
+                            strokeOpacity: 1,
+                            strokeWeight: 2,
+                            fillColor: color,
+                            fillOpacity: 1,
+                          },
+                          offset: '100%',
+                        },
+                      ],
+                    }}
+                  />
+                )
               )}
             </React.Fragment>
           );

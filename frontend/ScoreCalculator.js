@@ -171,15 +171,8 @@ function mergeTrails(trails) {
   if (!trails) return lines;
   Object.values(trails).forEach(arr => {
     if (Array.isArray(arr) && arr.length) {
-      // dedupe consecutive duplicates
-      const uniq = [];
-      for (let i = 0; i < arr.length; i++) {
-        const p = arr[i];
-        if (!p) continue;
-        const last = uniq[uniq.length - 1];
-        if (!last || last.latitude !== p.latitude || last.longitude !== p.longitude) uniq.push(p);
-      }
-      if (uniq.length >= 1) lines.push(uniq);
+  // Keep all points, including consecutive duplicates, to preserve temporal detail
+  lines.push(arr.filter(Boolean));
     }
   });
   return lines;
