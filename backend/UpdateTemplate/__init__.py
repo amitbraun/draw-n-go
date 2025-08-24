@@ -30,6 +30,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     # Validate optional fields
     if multiplier is not None:
         try:
+            if isinstance(multiplier, str):
+                multiplier = multiplier.replace(',', '.').strip()
             multiplier = float(multiplier)
         except Exception:
             return func.HttpResponse(json.dumps({"error":"Invalid multiplier"}), status_code=400, headers={**cors, "Content-Type":"application/json"})

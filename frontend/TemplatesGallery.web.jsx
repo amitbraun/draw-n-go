@@ -12,7 +12,7 @@ Admins also see a button to create a new template (navigates to CreateTemplate s
 */
 
 const CARD_SIZE = 140; // px square for preview polygon
-const NAME_BAR_HEIGHT = 30; // extra vertical space for name below shape
+const NAME_BAR_HEIGHT = 48; // taller footer to hold name + multiplier on separate lines
 const PADDING = 10;
 
 function TemplatePreview({ template, isAdmin, onDelete, onUpdated }) {
@@ -83,13 +83,10 @@ function TemplatePreview({ template, isAdmin, onDelete, onUpdated }) {
           </TouchableOpacity>
         )}
       </View>
-      <View style={{ height: NAME_BAR_HEIGHT, width: '100%', borderTopWidth:1, borderTopColor:'#eee', alignItems:'center', justifyContent:'center', paddingHorizontal:4 }}>
-        <Text numberOfLines={1} style={{ fontSize:12, fontWeight:'600', color:'#333' }}>{template.templateId}</Text>
-      </View>
-      {/* Multiplier row */}
-      <View style={{ position:'absolute', bottom: NAME_BAR_HEIGHT + 0, left:0, right:0, alignItems:'center', paddingBottom:4 }}>
+      <View style={{ height: NAME_BAR_HEIGHT, width: '100%', borderTopWidth:1, borderTopColor:'#eee', alignItems:'center', justifyContent:'center', paddingHorizontal:6, paddingVertical:4 }}>
+        <Text numberOfLines={1} style={{ fontSize:12, fontWeight:'700', color:'#333' }}>{template.displayName || template.templateId}</Text>
         {editMult ? (
-          <div style={{ display:'flex', gap:6, alignItems:'center', justifyContent:'center' }}>
+          <div style={{ display:'flex', gap:6, alignItems:'center', justifyContent:'center', marginTop:4 }}>
             <input type="number" step="0.05" value={mult}
               onChange={e=>setMult(e.target.value)}
               style={{ width:70, padding:4, border:'1px solid #21a4d6', borderRadius:6 }} />
@@ -97,10 +94,10 @@ function TemplatePreview({ template, isAdmin, onDelete, onUpdated }) {
             <button onClick={()=>{ setEditMult(false); setMult(Number(template.multiplier)||1); }} style={{ background:'#aaa', color:'#fff', border:'none', padding:'4px 8px', borderRadius:6 }}>Cancel</button>
           </div>
         ) : (
-          <div style={{ display:'flex', gap:6, alignItems:'center', justifyContent:'center' }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center', justifyContent:'center', marginTop:2 }}>
             <span style={{ fontSize:12, color:'#333' }}>x{Number(template.multiplier || 1).toFixed(2)}</span>
             {isAdmin && (
-              <button onClick={()=>setEditMult(true)} style={{ background:'#eee', border:'1px solid #ccc', padding:'2px 6px', borderRadius:6, fontSize:11 }}>Edit</button>
+              <button onClick={()=>setEditMult(true)} style={{ background:'#f6f6f6', border:'1px solid #ccc', padding:'2px 6px', borderRadius:6, fontSize:11 }}>Edit</button>
             )}
           </div>
         )}

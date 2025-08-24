@@ -55,21 +55,33 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     multiplier = data.get('multiplier')
     try:
+        # Accept both dot and comma decimal separators
+        if isinstance(multiplier, str):
+            multiplier = multiplier.replace(',', '.').strip()
         multiplier = float(multiplier) if multiplier is not None else None
         if multiplier is not None and multiplier <= 0:
             multiplier = None
     except Exception:
         multiplier = None
 
+    # Determine multiplier to store (use provided, else default 1.0 for custom templates)
+    mval = None
+    if multiplier is not None:
+        try:
+            mval = round(float(multiplier), 4)
+        except Exception:
+            mval = None
+    if mval is None:
+        mval = 1.0
+
     entity = {
         'PartitionKey': 'template',
         'RowKey': template_id,
         'displayName': template_id.capitalize(),
         'baseVertices': json.dumps(base_vertices),
-        'isCustom': True  # mark newly created templates as custom (deletable)
+        'isCustom': True,  # mark newly created templates as custom (deletable)
+        'multiplier': mval,
     }
-    if multiplier is not None:
-        entity['multiplier'] = multiplier
     try:
         table.create_entity(entity)
     except Exception as e:
