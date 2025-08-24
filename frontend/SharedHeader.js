@@ -31,6 +31,9 @@ const SharedHeader = ({ navigation, showHome, username, onSignOut, hideSignOut =
   <TouchableOpacity onPress={() => navigation.navigate('Templates', { username })} style={{ marginLeft: 12 }}>
         <Text style={{ color: '#fff', fontWeight: '600' }}>Templates</Text>
       </TouchableOpacity>
+      <TouchableOpacity onPress={() => navigation.navigate('HighScores', { username })} style={{ marginLeft: 12 }}>
+        <Text style={{ color: '#fff', fontWeight: '600' }}>Hi-Scores</Text>
+      </TouchableOpacity>
     </View>
     {/* Right: Sign Out */}
     {!hideSignOut && (

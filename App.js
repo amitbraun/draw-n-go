@@ -11,6 +11,7 @@ import SignupScreen from './frontend/SignupScreen';
 import WaitingRoom from './frontend/WaitingRoom';
 import GameScreen from './frontend/GameScreen';
 import PlayerPage from './frontend/PlayerPage';
+import HighScoresPage from './frontend/HighScoresPage';
 import NewTemplateCreator from './frontend/NewTemplateCreator.web.jsx';
 import TemplatesGallery from './frontend/TemplatesGallery.web.jsx';
 
@@ -82,6 +83,11 @@ export default function App() {
           name="Templates"
           component={TemplatesGallery}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="HighScores"
+          component={HighScoresPage}
+          options={{ headerShown: false, presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }}
         />
       </Stack.Navigator>
     </NavigationContainer>
