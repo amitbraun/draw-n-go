@@ -102,7 +102,6 @@ const MainScreen = ({ navigation, route }) => {
       <SharedHeader navigation={navigation} username={username} />
       <View style={styles.middlePlaceholder}>
         <Text style={styles.title}>Main Screen</Text>
-        <Text style={styles.placeholderText}>Your location-based features will appear here.</Text>
       </View>
 
       <View style={styles.actionContainer}>

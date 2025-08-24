@@ -65,10 +65,10 @@ const HighScoresPage = ({ route, navigation }) => {
     <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' }}>
       <View style={{ width: '92%', maxWidth: 820, height: '80%', backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' }}>
         <SafeAreaView style={{ flex: 1 }}>
-          <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#21a4d6' }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#21a4d6', position: 'relative' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: 36 }}>
               <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>Global Hi-Scores</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                 <Text style={{ color: '#fff', marginRight: 8 }}>Template:</Text>
                 <select
                   value={selectedTemplate}
@@ -79,18 +79,28 @@ const HighScoresPage = ({ route, navigation }) => {
                     <option key={opt.id} value={opt.id}>{opt.name}</option>
                   ))}
                 </select>
-                  <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Close">
-                    <Text style={{ color: '#d9534f', fontWeight: 'bold', fontSize: 18 }}>✕</Text>
-                  </TouchableOpacity>
               </View>
             </View>
+            <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Close" style={{ position: 'absolute', right: 12, top: 10 }}>
+              <Text style={{ color: '#d9534f', fontWeight: 'bold', fontSize: 18 }}>✕</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={{ paddingHorizontal: 16, paddingVertical: 16, flex: 1, overflow: Platform.OS === 'web' ? 'auto' : 'hidden' }}>
             {loading ? (
-              <ActivityIndicator size="large" color="#21a4d6" />
+              <>
+                <ActivityIndicator size="large" color="#21a4d6" />
+                <TouchableOpacity style={[styles.button, { backgroundColor: '#d9534f', alignSelf: 'center', marginTop: 16 }]} onPress={() => navigation.goBack()}>
+                  <Text style={styles.buttonText}>Close</Text>
+                </TouchableOpacity>
+              </>
             ) : rows.length === 0 ? (
-              <Text style={{ color: '#888' }}>No results.</Text>
+              <>
+                <Text style={{ color: '#888' }}>No results.</Text>
+                <TouchableOpacity style={[styles.button, { backgroundColor: '#d9534f', alignSelf: 'center', marginTop: 16 }]} onPress={() => navigation.goBack()}>
+                  <Text style={styles.buttonText}>Close</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <>
                 <FlatList
@@ -118,12 +128,12 @@ const HighScoresPage = ({ route, navigation }) => {
                         ))}
                       </View>
                       <Text style={{ color: '#888', marginTop: 6, fontSize: 12 }}>Game ID: {item.gameId} · Date: {item.date} · Duration: {item.timePlayedSec != null ? `${item.timePlayedSec}s` : '—'}</Text>
-                      {/* Drawing feature removed */}
                     </View>
                   )}
                   style={{ flex: 1 }}
                   contentContainerStyle={{ paddingBottom: 24 }}
-                    ListFooterComponent={(
+                  ListFooterComponent={(
+                    <>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                         <TouchableOpacity onPress={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={[styles.button, { opacity: page <= 1 ? 0.5 : 1, paddingVertical: 8, paddingHorizontal: 12 }]}>
                           <Text style={styles.buttonText}>Prev</Text>
@@ -133,7 +143,11 @@ const HighScoresPage = ({ route, navigation }) => {
                           <Text style={styles.buttonText}>Next</Text>
                         </TouchableOpacity>
                       </View>
-                    )}
+                      <TouchableOpacity style={[styles.button, { backgroundColor: '#d9534f', alignSelf: 'center', marginTop: 12, paddingHorizontal: 16, paddingVertical: 8 }]} onPress={() => navigation.goBack()}>
+                        <Text style={styles.buttonText}>Close</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 />
               </>
             )}

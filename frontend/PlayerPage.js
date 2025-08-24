@@ -91,7 +91,7 @@ const PlayerPage = ({ route, navigation }) => {
                             {item.templateName || item.templateId || 'Template'}
                           </Text>
                           <Text style={{ color: '#f88a3b', fontWeight: 'bold' }}>
-                            Duration: {item.timePlayedSec != null ? `${item.timePlayedSec}s` : '—'}
+                            Team Points: {item.finalScore != null ? item.finalScore : '—'}
                           </Text>
                         </View>
                         <Text style={{ color: '#333' }}>Role: {item.role}</Text>
@@ -101,10 +101,7 @@ const PlayerPage = ({ route, navigation }) => {
                         {item.totalAccuracy != null && (
                           <Text style={{ color: '#333' }}>Team Accuracy: {item.totalAccuracy}%</Text>
                         )}
-                        {item.finalScore != null && (
-                          <Text style={{ color: '#333' }}>Team Points: {item.finalScore}</Text>
-                        )}
-                        <Text style={{ color: '#888', marginTop: 4, fontSize: 12 }}>Game ID: {item.gameId} · Date: {item.date}</Text>
+                        <Text style={{ color: '#888', marginTop: 4, fontSize: 12 }}>Game ID: {item.gameId} · Date: {item.date} · Duration: {item.timePlayedSec != null ? `${item.timePlayedSec}s` : '—'}</Text>
                       </View>
                     )}
                     style={{ flex: 1 }}
