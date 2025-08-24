@@ -51,11 +51,27 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
         if end_game:
             print("DEBUG: Ending game")
-            game_id = session.get("currentGameId")
+            # Allow client to provide gameId explicitly (painter upload after admin ends)
+            game_id = session.get("currentGameId") or data.get("gameId")
             if game_id:
                 try:
                     game = games_table.get_entity(partition_key="game", row_key=game_id)
+                    # Persist optional results payload if provided by client
+                    try:
+                        results = data.get("results")
+                    except Exception:
+                        results = None
+                    if results is not None:
+                        try:
+                            game["results"] = json.dumps(results)
+                            team = results.get("team") if isinstance(results, dict) else None
+                            if team and isinstance(team, dict):
+                                if "adjustedPct" in team: game["teamAccuracy"] = float(team.get("adjustedPct"))
+                                if "accuracyPct" in team: game["teamF1"] = float(team.get("accuracyPct"))
+                        except Exception as e:
+                            print(f"DEBUG: Failed to serialize results: {str(e)}")
                     game["status"] = "completed"
+                    game["timeCompleted"] = datetime.utcnow().isoformat() + "Z"
                     games_table.update_entity(game, mode="merge")
                 except Exception as e:
                     print(f"DEBUG: Failed to update game entity: {str(e)}")
@@ -68,7 +84,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             session_table.update_entity(session, mode="merge")
             print("DEBUG: Game ended and session updated")
             return func.HttpResponse(
-                json.dumps({"message": "Game ended"}),
+                json.dumps({"message": "Game ended", "gameId": game_id}),
                 status_code=200,
                 headers={**cors_headers, "Content-Type": "application/json"}
             )

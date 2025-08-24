@@ -7,7 +7,7 @@ export default {
       
       extra: {
         WEATHER_API_KEY: require('./expo.settings.json').WEATHER_API_KEY ,
-        GOOGLE_MAPS_API_KEY : "AIzaSyCp5hkLYSWz6tE-2QhrsQPx_-Cpz3loKnM"
+        GOOGLE_MAPS_API_KEY : "AIzaSyDl0P1-wClgc81tUe3LPs8r7SAn-wBBLpQ"
       }
     }
   }

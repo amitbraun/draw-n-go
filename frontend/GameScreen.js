@@ -3,7 +3,7 @@ import { View, Text, SafeAreaView, TouchableOpacity } from 'react-native';
 import * as Location from 'expo-location';
 import styles from './styles';
 import PainterMap from './PainterMap.web.jsx';
-import { scoreWalkVsTemplate } from './ScoreCalculator';
+import { scorePerUserAndTeam } from './ScoreCalculator';
 import ResultsModal from './ResultsModal';
 
 const FUNCTION_APP_ENDPOINT = 'https://draw-n-go.azurewebsites.net';
@@ -172,7 +172,7 @@ const GameScreen = ({ route, navigation }) => {
     return () => clearInterval(interval);
   }, [isPainter, gameId, users, roles]);
 
-  // Poll session end
+  // Poll session end; if game ended externally (e.g., by admin), painter uploads results
   useEffect(() => {
     if (ending) return;
     const interval = setInterval(async () => {
@@ -181,6 +181,20 @@ const GameScreen = ({ route, navigation }) => {
         if (response.ok) {
           const data = await response.json();
           if (!data.isStarted) {
+            // If painter, compute and upload results before navigating away
+            if (isPainter) {
+              try {
+                const brushUsers = users.filter(u => roles[u] !== 'Painter');
+                const { scorePerUserAndTeam } = require('./ScoreCalculator');
+                const metrics = scorePerUserAndTeam(trails, template || data.template, brushUsers);
+                // Use existing StartGame to attach results. Provide currentGameId if present in data.
+                await fetch(`${FUNCTION_APP_ENDPOINT}/api/StartGame`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ sessionId, endGame: true, gameId: data.currentGameId, results: metrics }),
+                });
+              } catch {}
+            }
             navigation.replace('WaitingRoom', { sessionId, username, isAdmin, template: data.template || template || null });
           }
         }
@@ -195,28 +209,35 @@ const GameScreen = ({ route, navigation }) => {
     setCalculating(true);      // Show loading state in modal
     let scoreResults = [];
     try {
+      // Compute metrics before ending so we can persist them
+      const brushUsers = users.filter(u => roles[u] !== 'Painter');
+      const metricsPayload = (() => {
+        try {
+          const { scorePerUserAndTeam } = require('./ScoreCalculator');
+          const m = scorePerUserAndTeam(trails, template, brushUsers);
+          return m;
+        } catch { return null; }
+      })();
+
       const endRes = await fetch(`${FUNCTION_APP_ENDPOINT}/api/StartGame`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, endGame: true }),
+        body: JSON.stringify({ sessionId, endGame: true, results: metricsPayload || undefined }),
       });
       // After ending, fetch fresh session (cache-busted) to capture template & state
       try {
         const res = await fetch(`${FUNCTION_APP_ENDPOINT}/api/JoinSession?sessionId=${sessionId}&t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
+          // Compute per-user and team scores using current trails and template
           const data = await res.json();
-          // Calculate scores for each player (dummy example, adapt as needed)
-          scoreResults = (data.players || []).map(player => {
-            // You need to provide playerLatLon, templateLatLon, elapsedSec for each player
-            // Example:
-            return {
-              username: player.username,
-              score: scoreWalkVsTemplate(player.latLon, data.template.latLon, player.elapsedSec).score
-            };
-          });
+          const tpl = template || data.template;
+          const metrics = scorePerUserAndTeam(trails, tpl, brushUsers);
+          scoreResults = [
+            ...metrics.perUser.map(p => ({ username: p.username, score: `${p.adjustedPct}%` })),
+            { username: 'Total Accuracy', score: `${metrics.team.adjustedPct}%` },
+          ];
           setResults(scoreResults);
           setCalculating(false);
-          // Do NOT auto-close modal; wait for user to close
           return;
         }
       } catch {}
