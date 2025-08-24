@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Draw‑n‑Go – Faster, Smarter Shapes</title>
+  <meta name="description" content="Draw‑n‑Go: a lightweight tool to pick, drag, and save geometric shapes on a map with precise coordinates and sizes." />
+  <meta property="og:title" content="Draw‑n‑Go" />
+  <meta property="og:description" content="Pick, drag, and save shapes on a map – fast." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    /* Prevent video player from resizing when controls appear */
+    #aboutVideo {
+      aspect-ratio: 16/9;
+      width: 100% !important;
+      height: 100% !important;
+      min-width: 0;
+      min-height: 0;
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+    }
+    :root{
+      --brand:#6c5ce7;
+      --brand-2:#a29bfe;
+      --ink:#1b1b1f;
+    }
+    html,body{font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;color:var(--ink)}
+    .navbar{--bs-navbar-padding-y:.7rem}
+    .navbar-brand{font-weight:800; letter-spacing:.2px}
+    .btn-brand{background:var(--brand);border:none}
+    .btn-brand:hover{background:#5848e6}
+    .text-brand{color:var(--brand)!important}
+    .hero{position:relative; overflow:hidden}
+    .hero::after{content:""; position:absolute; inset:-20% -10% auto -10%; height:80%; background:radial-gradient(60% 60% at 60% 20%, var(--brand-2) 0, transparent 60%); opacity:.35; z-index:0}
+    .hero-blob{position:absolute; right:-160px; top:-160px; width:560px; height:560px; background:radial-gradient(circle at 30% 30%, var(--brand) 0, transparent 60%); filter:blur(60px); opacity:.25}
+    .section{padding:80px 0}
+    .section-title{font-weight:800; letter-spacing:.2px}
+    .feature-icon{font-size:1.75rem}
+    .card{border:1px solid #eee}
+    .shadow-soft{box-shadow: 0 10px 30px rgba(0,0,0,.06)}
+    .bg-faint{background:linear-gradient(180deg, #fcfcff, #fff)}
+    .rounded-2xl{border-radius:1.25rem}
+    .scroll-offset{scroll-margin-top:90px}
+    .avatar{width:88px; height:88px; border-radius:50%; object-fit:cover}
+    .footer{background:#0f1021; color:#cfd3e2}
+    a{color:var(--brand)} a:hover{color:#5848e6}
+  </style>
+</head>
+<body data-bs-spy="scroll" data-bs-target="#topnav" data-bs-smooth-scroll="true" tabindex="0">
+
+  <!-- NAVBAR -->
+  <nav id="topnav" class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+    <div class="container">
+  <a class="navbar-brand" href="#home">Draw &amp; Go</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div id="nav" class="collapse navbar-collapse">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="#about">About</a></li>
+          <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+          <li class="nav-item"><a class="nav-link" href="#tech">Tech</a></li>
+          <li class="nav-item"><a class="nav-link" href="#logic">Logic</a></li>
+          <li class="nav-item"><a class="nav-link" href="#team">Team</a></li>
+        </ul>
+  </nav>
+
+  <!-- HERO -->
+  <header id="home" class="hero bg-faint section pt-5 pb-5" style="min-height: 100vh; min-height: 100dvh; display: flex; align-items: center;">
+    <div class="container position-relative text-center py-5" style="z-index:1;">
+      <h1 class="display-1 fw-bold mb-4" style="font-size:5rem;">Draw &amp; Go</h1>
+      <p class="lead fs-2 mb-5" style="font-size:2.2rem;">Turn maps into playgrounds</p>
+  <a href="#about" class="btn btn-brand text-white btn-lg shadow-soft scroll-link" style="font-size:1.4rem; padding: 1em 3em;">Read more</a>
+    </div>
+  </header>
+
+  <!-- ABOUT -->
+  <section id="about" class="section scroll-offset" style="min-height: 100vh; min-height: 100dvh; display: flex; align-items: center;">
+    <div class="container">
+      <div class="row">
+        <div class="col-12 text-center mb-4">
+          <h2 class="section-title mb-3">About Draw‑n‑Go</h2>
+          <p class="lead text-secondary mb-0">A simple, fun interface for turning maps into games. <br> Perfect for outdoor play, creative challenges, and exercising while having fun.</p>
+        </div>
+      </div>
+      <div class="row align-items-center">
+        <div class="col-lg-6 d-flex flex-row align-items-stretch" style="gap:32px;">
+          <div class="d-flex flex-column justify-content-between" style="gap:18px; min-width: 420px; max-width: 420px;">
+            <div class="about-feature-box d-flex align-items-start gap-3 p-4 border rounded-2xl bg-white shadow-soft" style="min-height: 120px;">
+              <i class="bi bi-people-fill feature-icon text-brand flex-shrink-0" style="font-size:1.5rem;"></i>
+              <div>
+                <h6 class="fw-bold mb-1">Get Ready</h6>
+                <p class="text-secondary mb-0 small">Create new session or join an existing one with your friends!</p>
+              </div>
+            </div>
+            <div class="about-feature-box d-flex align-items-start gap-3 p-4 border rounded-2xl bg-white shadow-soft" style="min-height: 120px;">
+              <i class="bi bi-vector-pen feature-icon text-brand flex-shrink-0" style="font-size:1.5rem;"></i>
+              <div>
+                <h6 class="fw-bold mb-1">Draw</h6>
+                <p class="text-secondary mb-0 small">Choose a template or create your own. </br>Then drag and adjust to match your playground. </br>From template to custom in seconds!</p>
+              </div>
+            </div>
+            <div class="about-feature-box d-flex align-items-start gap-3 p-4 border rounded-2xl bg-white shadow-soft" style="min-height: 120px;">
+              <i class="bi bi-flag-fill feature-icon text-brand flex-shrink-0" style="font-size:1.5rem;"></i>
+              <div>
+                <h6 class="fw-bold mb-1">Go!</h6>
+                <p class="text-secondary mb-0 small">Trace your creation with friends. Share locations, set high scores, and race against the clock for ultimate bragging rights.</p>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex align-items-stretch" style="flex:1;">
+            <div class="rounded-2xl shadow-soft position-relative bg-black d-flex align-items-center justify-content-center" style="overflow:hidden; height: 100%; min-width: 0; width:calc(2*420px + 32px); max-width:100%; flex-basis:calc(2*420px + 32px); flex-grow:1;">
+              <video id="aboutVideo" class="w-100 h-100 rounded-2xl" poster="https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg" style="background:#000;object-fit:cover; height: 100%;" controls>
+                <source src="rolled.mov" type="video/mp4">
+                Your browser does not support the video tag.
+              </video>
+              <button id="playAboutVideo" type="button" class="btn btn-brand position-absolute top-50 start-50 translate-middle" style="font-size:2.5rem; padding:0.5em 1.2em; z-index:2;">
+                <i class="bi bi-play-fill"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="section bg-faint scroll-offset" style="min-height: 100vh; min-height: 100dvh; display: flex; align-items: center;">
+    <div class="container">
+      <h2 class="section-title text-center mb-2">Features</h2>
+      <div class="text-center mb-4" style="max-width:900px;margin:0 auto;">
+        <span class="lead text-secondary">Draw &amp; Go offers a comprehensive suite of features designed to enhance the experience for users, streamline session management, and make creative play easy and fun.</span>
+      </div>
+
+      <!-- Game Features -->
+      <div class="row gy-4 justify-content-between align-items-center mb-5">
+        <div class="features-image col-lg-4 d-flex align-items-center justify-content-center">
+          <img src="waitingRoom.png" class="img-fluid shadow-soft rounded-2xl" alt="Customer Portal" style="max-height:420px; background:#fff; object-fit:contain;" />
+        </div>
+        <div class="col-lg-7 d-flex flex-column justify-content-center">
+          <h3 class="fw-bold mb-4">Game Features</h3>
+          <div class="features-item d-flex mb-4">
+            <i class="bi bi-controller fs-2 me-3 flex-shrink-0"></i>
+            <div>
+              <h4 class="fw-bold mb-1">Game Rooms</h4>
+              <p class="mb-0">Join a game room by entering the session ID, or the room admin username. Collaborate with friends to complete challenges and earn rewards.</p>
+            </div>
+          </div>
+          <div class="features-item d-flex mb-4">
+            <i class="bi bi-cloud-sun fs-2 me-3 flex-shrink-0"></i>
+            <div>
+              <h4 class="fw-bold mb-1">Weather Tracking</h4>
+              <p class="mb-0">Utilizing location and real time data with weather API to provide users with accurate weather and suggestions.</p>
+            </div>
+          </div>
+          <div class="features-item d-flex mb-4">
+            <i class="bi bi-lock fs-2 me-3 flex-shrink-0"></i>
+            <div>
+              <h4 class="fw-bold mb-1">Secure Authentication</h4>
+              <p class="mb-0">User data is protected with hashed passwords stored in the database, while tokens are securely saved in cookies for session management.</p>
+            </div>
+          </div>
+          <div class="features-item d-flex mb-4">
+            <i class="bi bi-map fs-2 me-3 flex-shrink-0"></i>
+            <div>
+              <h4 class="fw-bold mb-1">Real-time location</h4>
+              <p class="mb-0">Track the real-time location of players within the game environment, enhancing collaboration and strategy.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Portal -->
+      <div class="row gy-4 justify-content-between align-items-center mb-5 flex-row-reverse">
+        <div class="features-image col-lg-5 d-flex align-items-center justify-content-center">
+          <img src="assets/img/speedymarket-computer-manager.png" class="img-fluid shadow-soft rounded-2xl" alt="Manager Portal" style="max-height:420px; background:#fff; object-fit:contain;" />
+        </div>
+        <div class="col-lg-7 d-flex flex-column justify-content-center">
+          <h3 class="fw-bold mb-4">Admin Portal</h3>
+          <div class="features-item d-flex mb-4">
+            <i class="bi bi-map fs-2 me-3 flex-shrink-0"></i>
+            <div>
+              <h4 class="fw-bold mb-1">Template Management</h4>
+              <p class="mb-0">Create and manage the different templates for the game environment.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Portal -->
+      <div class="row gy-4 justify-content-between align-items-center mb-5">
+        <div class="features-image col-lg-5 d-flex align-items-center justify-content-center">
+          <img src="assets/img/speedymarket-computer-supplier.png" class="img-fluid shadow-soft rounded-2xl" alt="Supplier Portal" style="max-height:420px; background:#fff; object-fit:contain;" />
+        </div>
+        <div class="col-lg-7 d-flex flex-column justify-content-center">
+          <h3 class="fw-bold mb-4">Users Portal</h3>
+          <div class="features-item d-flex mb-4">
+            <i class="bi bi-check-square fs-2 me-3 flex-shrink-0"></i>
+            <div>
+              <h4 class="fw-bold mb-1">Highscore Tracking</h4>
+              <p class="mb-0">View your high scores and achievements in the game.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TECH / SERVICES -->
+  <section id="tech" class="tech section bg-faint scroll-offset" style="min-height: 100vh; min-height: 100dvh; display: flex; align-items: center;">
+    <div class="container">
+      <div class="section-title text-center mb-5">
+        <h2>Tech</h2>
+        <p>Draw N Go<sup>®</sup> is powered by cutting-edge cloud and API technologies for smooth gaming experience and optimized performance</p>
+      </div>
+      <div class="row gy-4">
+  <div class="col-lg-6 col-md-6">
+          <div class="service-item position-relative p-4 rounded-2xl bg-dark text-white h-100">
+            <div class="icon mb-3"><i class="fa fa-database" style="color: white;"></i></div>
+            <h3>Azure SQL Database</h3>
+            <p>Reliable and scalable database management for secure data storage and fast retrieval.</p>
+          </div>
+        </div>
+  <div class="col-lg-6 col-md-6">
+          <div class="service-item position-relative p-4 rounded-2xl bg-dark text-white h-100">
+            <div class="icon mb-3"><i class="fa fa-bolt"></i></div>
+            <h3>Azure Cloud Functions</h3>
+            <p>Http triggered functions providing serverless computing for efficient execution of backend operations and business logic.</p>
+          </div>
+        </div>
+  <div class="col-lg-6 col-md-6">
+          <div class="service-item position-relative p-4 rounded-2xl bg-dark text-white h-100">
+            <div class="icon mb-3"><i class="bi bi-geo-alt-fill"></i></div>
+            <h3>Google Maps</h3>
+            <p>Integration with Google Maps for location polling and realtime tracking of multiple participants.</p>
+          </div>
+        </div>
+  <div class="col-lg-6 col-md-6">
+          <div class="service-item position-relative p-4 rounded-2xl bg-dark text-white h-100">
+            <div class="icon mb-3"><i class="bi bi-globe-americas"></i></div>
+            <h3>OpenWeather API</h3>
+            <p>Provides accurate weather data based on your location, advising on optimal playing time.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGIC / ARCHITECTURE -->
+  <section id="logic" class="section bg-faint scroll-offset" style="min-height: 100vh; min-height: 100dvh; display: flex; align-items: center;">
+    <div class="container">
+      <div class="row justify-content-center text-center">
+        <div class="col-xl-8">
+          <h2 class="section-title mb-3">Logic</h2>
+          <p class="lead text-secondary">Our architecture combines cloud services and real-time systems and data polling for a smooth and efficient gaming experience. </br> View our source code on Github</p>
+        </div>
+      </div>
+      <div class="row justify-content-center mb-4">
+        <div class="col-xl-8 text-center">
+          <img src="external apis.png" alt="External APIs Architecture" class="img-fluid rounded-2xl shadow-soft" style="max-width:100%;height:auto;" />
+        </div>
+        </div>
+      </div>
+      
+    </div>
+  </section>
+
+  <!-- TEAM -->
+  <section id="team" class="section scroll-offset" style="min-height: 100vh; min-height: 100dvh; display: flex; align-items: center;">
+    <div class="container">
+      <h2 class="section-title text-center mb-2">Our Team</h2>
+      <h5 class="text-center text-secondary mb-4" style="font-weight:600; font-size:1.1rem;">
+        We are two friends from the army, still serving as air traffic controllers in reserve duty.<br>
+        This game is a combination of traffic controlling, sports and real-time data visualization.
+      </h5>
+      <div class="row g-4 justify-content-center">
+        <div class="col-md-4 col-lg-3 text-center">
+          <img class="avatar shadow-soft" src="zucker.png" alt="Teammate" />
+          <h6 class="mt-3 mb-0">Amit Zucker</h6>
+        </div>
+        <div class="col-md-4 col-lg-3 text-center">
+          <img class="avatar shadow-soft" src="braun.jpeg" alt="Teammate" />
+          <h6 class="mt-3 mb-0">Amit Braun</h6>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- FOOTER -->
+  <footer class="footer py-5">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-md-6">
+          <div class="fw-semibold">Draw‑n‑Go</div>
+          <small class="text-secondary">© <span id="year"></span> All rights reserved.</small>
+        </div>
+        <div class="col-md-6 text-md-end mt-3 mt-md-0">
+          <a class="me-3" href="#about">About</a>
+          <a class="me-3" href="#features">Features</a>
+          <a class="me-3" href="#tech">Tech</a>
+          <a class="me-3" href="#logic">Logic</a>
+          <a href="#team">Team</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Back to top -->
+  <button id="toTop" class="btn btn-light border rounded-circle position-fixed" style="right:18px; bottom:18px; width:48px; height:48px; display:none;">
+    <i class="bi bi-arrow-up"></i>
+  </button>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Play button for about video
+    const playBtn = document.getElementById('playAboutVideo');
+    const video = document.getElementById('aboutVideo');
+    if (playBtn && video) {
+      playBtn.addEventListener('click', function() {
+        video.play();
+        playBtn.style.display = 'none';
+      });
+      video.addEventListener('play', function() {
+        playBtn.style.display = 'none';
+      });
+      video.addEventListener('pause', function() {
+        if (video.currentTime > 0 && video.currentTime < video.duration) {
+          playBtn.style.display = '';
+        }
+      });
+    }
+    // Smooth scroll for .scroll-link to match navbar offset
+    document.querySelectorAll('.scroll-link').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        var target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          var yOffset = -90; // matches .scroll-offset scroll-margin-top
+          var y = target.getBoundingClientRect().top + window.pageYOffset + yOffset;
+          window.scrollTo({top: y, behavior: 'smooth'});
+        }
+      });
+    });
+    // Year
+    document.getElementById('year').textContent = new Date().getFullYear();
+    // Back to top
+    const toTop = document.getElementById('toTop');
+    window.addEventListener('scroll', () => {
+      toTop.style.display = window.scrollY > 600 ? 'block' : 'none';
+    });
+    toTop.addEventListener('click', () => window.scrollTo({top:0, behavior:'smooth'}));
+  </script>
+</body>
+</html>
