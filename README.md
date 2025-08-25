@@ -36,6 +36,7 @@ Real-Time Communication: WebSockets
 Deployment: Works in any modern browser, optimized for mobile
 
 📂 Project Structure
+```
 draw-n-go/
 ├─ frontend/           # React web app (mobile-first UI)
 ├─ backend/            # Node.js / Azure Functions (game + realtime)
@@ -45,7 +46,7 @@ draw-n-go/
 ├─ package.json        # Root scripts/deps
 ├─ app.config.js       # App configuration
 └─ local.settings.json # Local env (Azure Functions)
-
+```
 
 ⚙️ Getting Started
 Prerequisites
