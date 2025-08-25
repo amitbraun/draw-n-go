@@ -37,12 +37,15 @@ Deployment: Works in any modern browser, optimized for mobile
 
 📂 Project Structure
 draw-n-go/
-├── frontend/           # React web app
-├── backend/            # Node.js server (game logic + communication)
-├── assets/             # Images, demo video, UI assets
-├── App.js              # Main entry point
-├── package.json        # Dependencies & scripts
-└── README.md           # Documentation
+├─ frontend/           # React web app (mobile-first UI)
+├─ backend/            # Node.js / Azure Functions (game + realtime)
+├─ assets/             # Images, demo video, UI art
+├─ App.js              # App entry / host bootstrap
+├─ index.html          # Static host page
+├─ package.json        # Root scripts/deps
+├─ app.config.js       # App configuration
+└─ local.settings.json # Local env (Azure Functions)
+
 
 ⚙️ Getting Started
 Prerequisites
