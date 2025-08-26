@@ -1,3 +1,5 @@
+"""Return the templates catalog with base vertices and multipliers for clients."""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import os
@@ -35,6 +37,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             'circle': 1.05,
             'polygon': 1.0,
         }
+
         for e in entities:
             template_id = e.get("RowKey") or e.get("templateId")
             if not template_id:

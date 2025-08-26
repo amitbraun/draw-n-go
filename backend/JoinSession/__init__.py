@@ -1,3 +1,9 @@
+"""Manage session lifecycle: join/leave, ready toggles, and template setup.
+
+GET  -> session snapshot
+POST -> join/leave/setReady/setTemplate/setDefaultCenter
+"""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import json

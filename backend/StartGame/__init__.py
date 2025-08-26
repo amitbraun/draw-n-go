@@ -1,3 +1,12 @@
+"""Start or end a game for a session.
+
+POST:
+- Start: { sessionId, painter: username }
+- End:   { sessionId, endGame: true, gameId: string, results: object }
+
+Creates/updates Game and Session table entities, and persists a Scores row on end.
+"""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import json
@@ -6,7 +15,6 @@ import os
 from datetime import datetime
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    print("DEBUG: StartGame function triggered")
     cors_headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -14,43 +22,31 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     }
 
     if req.method == "OPTIONS":
-        print("DEBUG: OPTIONS request received")
         return func.HttpResponse("", status_code=200, headers={**cors_headers, "Content-Type": "application/json"})
 
     try:
-        print("DEBUG: Parsing request JSON")
         data = req.get_json()
-        print(f"DEBUG: Request data: {data}")
         session_id = data.get("sessionId")
         end_game = data.get("endGame", False)
         if not session_id:
-            print("DEBUG: Missing sessionId in request")
             return func.HttpResponse(json.dumps({"error": "Missing sessionId"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
 
-        print("DEBUG: Getting AzureWebJobsStorage connection string")
         connection_string = os.getenv("AzureWebJobsStorage")
         if not connection_string:
-            print("DEBUG: Missing AzureWebJobsStorage environment variable")
             return func.HttpResponse(json.dumps({"error": "Missing AzureWebJobsStorage"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
-        print("DEBUG: Connecting to Sessions table")
         try:
             session_table = TableClient.from_connection_string(connection_string, table_name="Sessions")
-            print("DEBUG: Connecting to Games table")
             games_table = TableClient.from_connection_string(connection_string, table_name="Games")
         except Exception as e:
-            print(f"DEBUG: Table connection failed: {str(e)}")
             return func.HttpResponse(json.dumps({"error": f"Table connection failed: {str(e)}"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
-        print("DEBUG: Fetching session entity")
         try:
             session = session_table.get_entity(partition_key="session", row_key=session_id)
         except Exception as e:
-            print(f"DEBUG: Session not found: {str(e)}")
             return func.HttpResponse(json.dumps({"error": f"Session not found: {str(e)}"}), status_code=404, headers={**cors_headers, "Content-Type": "application/json"})
 
         if end_game:
-            print("DEBUG: Ending game")
             # Allow client to provide gameId explicitly (painter upload after admin ends)
             game_id = session.get("currentGameId") or data.get("gameId")
             if game_id:
@@ -69,7 +65,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                                 if "adjustedPct" in team: game["teamAccuracy"] = float(team.get("adjustedPct"))
                                 if "accuracyPct" in team: game["teamF1"] = float(team.get("accuracyPct"))
                         except Exception as e:
-                            print(f"DEBUG: Failed to serialize results: {str(e)}")
+                            # If results can't be serialized, still complete the game
+                            pass
                     # Mark game completed and stamp end time
                     end_iso = datetime.utcnow().isoformat() + "Z"
                     game["status"] = "completed"
@@ -119,7 +116,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                             if session.get("templateVertices"):
                                 score_entity["templateVertices"] = session.get("templateVertices")  # JSON string of vertices
                         except Exception as e:
-                            print(f"DEBUG: Failed to attach template snapshot: {str(e)}")
+                            pass
 
                         # Attach totals from results.team
                         try:
@@ -158,7 +155,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                                 })
                             score_entity["players"] = json.dumps(players_list)
                         except Exception as e:
-                            print(f"DEBUG: Failed to build players list: {str(e)}")
+                            pass
 
                         # Optional: attach compact drawing from results.trails (downsample and cap size)
                         try:
@@ -205,7 +202,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                                     score_entity["drawing"] = json.dumps({"trails": compact})
                                     score_entity["hasDrawing"] = True
                         except Exception as e:
-                            print(f"DEBUG: Failed to attach drawing: {str(e)}")
+                            pass
 
                         # Optional: attach friendly template name
                         try:
@@ -225,11 +222,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                         try:
                             scores_table.upsert_entity(score_entity)
                         except Exception as e:
-                            print(f"DEBUG: Failed to upsert score entity: {str(e)}")
+                            pass
                     except Exception as e:
-                        print(f"DEBUG: Scores table write failed: {str(e)}")
+                        pass
                 except Exception as e:
-                    print(f"DEBUG: Failed to update game entity: {str(e)}")
+                    # If updating the game fails, still reset the session state below
+                    pass
                     # Continue to update session anyway
 
             session["isStarted"] = False
@@ -237,7 +235,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             session["roles"] = None
             session["painter"] = None
             session_table.update_entity(session, mode="merge")
-            print("DEBUG: Game ended and session updated")
             return func.HttpResponse(
                 json.dumps({"message": "Game ended", "gameId": game_id}),
                 status_code=200,
@@ -245,14 +242,11 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             )
 
         if session.get("isStarted", False):
-            print("DEBUG: Session already started")
             return func.HttpResponse(json.dumps({"error": "Session already started"}), status_code=400, headers={**cors_headers, "Content-Type": "application/json"})
 
-        print("DEBUG: Loading users from session entity")
         try:
             users = json.loads(session.get("users", "[]"))
         except Exception as e:
-            print(f"DEBUG: Corrupt users field: {str(e)}")
             return func.HttpResponse(json.dumps({"error": f"Corrupt users field: {str(e)}"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
         import random
@@ -260,10 +254,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         requested_painter = data.get("painter")
         if requested_painter and requested_painter in users:
             painter = requested_painter
-            print(f"DEBUG: Using requested painter: {painter}")
         else:
             painter = random.choice(users)
-            print(f"DEBUG: Selected random painter: {painter}")
 
         roles = {user: ("Painter" if user == painter else "Brush") for user in users}
 
@@ -278,14 +270,11 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "shape": "N/A",
             "status": "in progress"
         }
-        print("DEBUG: Creating game entity")
         try:
             games_table.create_entity(game_entity)
         except Exception as e:
-            print(f"DEBUG: Failed to create game entity: {str(e)}")
             return func.HttpResponse(json.dumps({"error": f"Failed to create game entity: {str(e)}"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
-        print("DEBUG: Updating session entity")
         try:
             session["isStarted"] = True
             session["currentGameId"] = game_id
@@ -293,10 +282,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             session["painter"] = painter
             session_table.update_entity(session, mode="merge")
         except Exception as e:
-            print(f"DEBUG: Failed to update session entity: {str(e)}")
             return func.HttpResponse(json.dumps({"error": f"Failed to update session entity: {str(e)}"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
 
-        print("DEBUG: Game started successfully")
         return func.HttpResponse(
             json.dumps({
                 "message": "Game started",
@@ -310,6 +297,5 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     except Exception as e:
-        print(f"DEBUG: Unhandled error: {str(e)}")
         return func.HttpResponse(json.dumps({"error": f"Unhandled error: {str(e)}"}), status_code=500, headers={**cors_headers, "Content-Type": "application/json"})
     return func.HttpResponse("StartGame function is running", status_code=200)

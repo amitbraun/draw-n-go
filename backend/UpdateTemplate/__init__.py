@@ -2,11 +2,7 @@ import azure.functions as func
 from azure.data.tables import TableClient
 import os, json
 
-"""
-HTTP POST UpdateTemplate
-Body: { templateId: str, multiplier?: number, displayName?: str }
-Updates editable fields on Templates table. Core templates allowed to update multiplier/displayName.
-"""
+"""Update editable properties for a template: multiplier and displayName."""
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     cors = {

@@ -1,10 +1,15 @@
+"""Create a new user record in the Users table with a hashed password.
+
+POST body: { username, password }
+Returns 201 on success; 409 if username already exists.
+"""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import hashlib
 import os
 import json
-
-
+import logging
 def main(req: func.HttpRequest) -> func.HttpResponse:
     cors_headers = {
         "Access-Control-Allow-Origin": "*",
@@ -37,5 +42,5 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 return func.HttpResponse("Signup successful", status_code=201, headers=cors_headers)
 
     except Exception as e:
-        print("--> Error:", str(e))
+        logging.exception("signup failed")
         return func.HttpResponse(f"Server error: {str(e)}", status_code=500, headers=cors_headers)

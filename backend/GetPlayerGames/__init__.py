@@ -1,3 +1,5 @@
+"""List games for a given username, including role and accuracy, paginated."""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import json

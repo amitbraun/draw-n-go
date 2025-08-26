@@ -1,3 +1,9 @@
+"""Upsert a player's latest location for a game and accumulate total distance.
+
+POST body: { username, gameId, location: { latitude, longitude, timestamp } }
+Stores entity in Distances table partitioned by gameId.
+"""
+
 import azure.functions as func
 import logging
 import os

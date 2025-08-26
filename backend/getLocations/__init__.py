@@ -1,3 +1,5 @@
+"""Return latest per-user game locations from Distances table for a given gameId."""
+
 import azure.functions as func
 import os
 from azure.data.tables import TableServiceClient

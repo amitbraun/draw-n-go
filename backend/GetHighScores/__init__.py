@@ -1,3 +1,5 @@
+"""List high scores with optional template filter and pagination."""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import json

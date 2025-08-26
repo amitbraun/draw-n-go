@@ -1,3 +1,5 @@
+"""Create a new multiplayer session and register the creator as the first user."""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import json

@@ -1,3 +1,5 @@
+"""Delete a custom template by templateId (core templates are protected)."""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import os, json

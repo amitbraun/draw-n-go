@@ -1,3 +1,9 @@
+"""Authenticate a user by validating username/password against the Users table.
+
+POST body: { username, password }
+Returns 200 on success, 401 on wrong password, 404 if user not found.
+"""
+
 import azure.functions as func
 from azure.data.tables import TableClient
 import json
@@ -33,6 +39,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             except:
                 return func.HttpResponse("User not found", status_code=404, headers=cors_headers)
     except Exception as e:
-        print("--> Error:", str(e))
+        # Unexpected failure path
+        logging.exception("login failed")
         return func.HttpResponse(f"Server error: {str(e)}", status_code=500, headers=cors_headers)
 
