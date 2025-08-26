@@ -136,8 +136,6 @@ Stores the latest location and cumulative distance per user per game.
 - RowKey: username (string)
 - Password: string (SHA-256 hex)
 
-![Output image](media/image1.png)
-
 ## Flows & Processes
 
 ### User Onboarding (complete)
@@ -169,6 +167,7 @@ Handles authentication, permission granting, and initial navigation.
 - Accuracy of trails compared to the template
 - Time taken
 - Difficulty of the template
+- Team size
 - Composite scoring method
 
 ### Template Management
@@ -183,19 +182,17 @@ Authenticate or sign up the user, ensure necessary permissions are granted, init
 
 1. **App Launch**
   - Display splash screen.
-  - Load configuration and check local authentication token.
   - On the entrance screen the current weather forecast, provided by OpenWeather API, is displayed based on the user location.
 
 2. **Sign Up / Login**
   - If no token:
     - Present the option to log in or sign up.
-    - For sign-up: collect email, password, display name; validate that both email and display name are unique among active users; hash and store credentials in Azure Table Storage.
-    - For login: collect email and password; validate against Azure records.
+    - For sign-up: collect username, password, display name; validate that username is unique among active users; hash and store credentials in Azure Table Storage.
+    - For login: collect username and password; validate against Azure records.
   - If token is valid: auto-login.
 
 3. **Permissions**
   - Request location access (foreground and background).
-  - Request notification permissions (for invites, game start, or drawing completion).
 
 4. **Profile Initialization**
   - Fetch or create a user profile.
@@ -207,7 +204,7 @@ Authenticate or sign up the user, ensure necessary permissions are granted, init
 
 **Edge Cases:**
 
-- Failed sign-up/login (e.g., email in use, wrong password): show error message and retry prompt.
+- Failed sign-up/login (e.g., username in use, wrong password): show error message and retry prompt.
 
 ## Game Lifecycle
 
@@ -240,30 +237,30 @@ After logging in, a user can create or join a session. The creator becomes the A
 - One player is designated as Painter (Brush).
   - This can be done at random, or by choosing a specific player. The mechanism is set by the session admin.
 - All other active participants are Runners.
-- Roles are recorded in the Players table with unique colors assigned to each participant.
+- Roles are stored on the session/game entities (roles JSON). Player colors are assigned client‑side for display only.
 
-**Painter (Brush) view:**
+**Painter view:**
 
 - Sees the template overlay in the fixed position and scale.
 - Sees the full trails of all Runners, built from their polled location points (rendered as colored polylines).
 - A marker indicating each Runner's latest point.
 - The time passed since the game started.
 
-**Runner view:**
+**Brush view:**
 
-- See only the time passed since the game started.
+- Sends location updates in the background. The UI shows only the elapsed time.
 
 ### Rendering the Template and Tracking Movement
 
 - All maps are fixed north-up; rotation and tilt are disabled.
 - At game start, GPS tracking begins for all participants.
-  - Runners send location updates to the server at a regular polling interval and/or after a minimum movement distance.
-  - The server stores each point in LocationPoints and aggregates them per Runner to form a trail.
-  - The Painter (Brush) polls the server to retrieve the latest cumulative trail data for each Runner and renders it as colored polylines.
+  - Runners send location updates to the server at a regular interval and after movement.
+  - The server stores only the latest location per user and a cumulative totalDistance in the Distances table.
+  - The Painter polls getLocations and reconstructs each Runner's trail locally from successive latest points, drawing colored polylines client-side.
 
 ### Game end
 
-- When the Painter decides, they press "End Game".
+- When the Painter or the Admin decides, they press "End Game".
 - Each player will see the score breakdown of the game on their screen, and then will be moved back to the session waiting room screen.
 
 ### Session end
@@ -275,23 +272,34 @@ After logging in, a user can create or join a session. The creator becomes the A
 During the game, the system tracks and displays the trails of the players.
 
 - Receiving and storing GPS coordinates
-- Broadcasting location updates to players
+- Painter polling of getLocations to fetch latest positions
 - Managing disconnects or location errors
 
 ## Scoring Process
 
 The scoring mechanism evaluates the game outcome. The shape referred to here is the combination of the chosen template, its size, and its fixed placement on the map.
 
-1. **Accuracy of trails compared to the shape**
-  - Each user's trail is compared against the shape. Deviations are quantified as errors which reduce the accuracy score.
-2. **Time Taken**
-  - The duration required to complete a trial is recorded from start to finish. Faster completion times are rewarded.
-3. **Difficulty of the Template**
-  - Templates have difficulty multipliers (based on complexity and length). Performance scores are adjusted relative to template difficulty.
-4. **Size of the shape**
-  - Larger shapes are harder and take more time; they are rewarded with more points.
-5. **Composite Scoring Method**
-  - A weighted composite score is calculated by combining the above elements (formula TBD).
+1) Accuracy against the shape (numeric)
+  - We sample the template boundary and player trails in meters (2 m spacing) and use a tolerance that scales with size: max(3 m, min(6% of radius, 10 m)).
+  - Coverage = fraction of template samples close to any trail; Precision = fraction of trail samples close to the template.
+  - accuracyPct = round(F1(Coverage, Precision) × 100).
+  - adjustedPct = round((Coverage × Precision) × 100). This “completion-corrected” accuracy drives points.
+
+2) Base points from accuracy
+  - Let B = adjustedPct (0..100).
+  - Base points P0 = 12 × B. This converts percent accuracy to a base score band (0..1200).
+
+3) Multipliers (applied multiplicatively)
+  - Difficulty: template.multiplier if set; otherwise defaults by shape: polygon/catch‑all 1.0, circle 1.05, triangle 1.15, square 1.30, star 1.60.
+  - Size (radiusMeters): radiusFactor = clamp(radiusMeters / 100, 0.8, 1.5). Example: 50 m → 0.8, 100 m → 1.0, 150 m+ → 1.5.
+  - Team size: teamFactor = 1 + log10(teamSize). Adds diminishing returns as more Brushes contribute.
+  - Time: timeFactor = clamp(90 / max(30, timeSeconds), 0.8, 1.2). Faster rounds slightly boost; very short/long rounds are bounded.
+
+4) Final score (stored as Scores.finalScore)
+  - points = round(P0 × difficulty × radiusFactor × teamFactor × timeFactor).
+
+Notes
+- accuracyPct and adjustedPct are also returned for display; the server persists team adjustedPct as totalAccuracy when provided, and the computed points as finalScore.
 
 Scores are presented at the end of each game and are also accessible through the user portal (via the user icon on the top left, or the high-scores tab). You can filter your high scores by different parameters.
 
@@ -302,6 +310,12 @@ The system supports a structured approach to managing templates, which serve as 
 1. **Creating New Templates**
   - An admin can create new templates by setting points on the map that define the shape, difficulty multiplier, and name.
 2. **Editing Existing Templates**
-  - Existing templates can be deleted, or have their difficulty multiplier edited. These actions can be performed only by an admin.
+  - Multipliers and display names can be edited for any template via UpdateTemplate. Core templates (circle, square, star, triangle) cannot be deleted. Custom templates (isCustom=true) can be deleted via DeleteTemplate.
 3. **Session-Specific Templates**
-  - Templates can be created for a single session. These do not have a custom difficulty multiplier and are deleted once the session ends.
+  - You can draw and save a new custom template in-app (web) using NewTemplateCreator, then select and set it in the waiting room. When a game ends, a snapshot of the selected template (center, radius, zoom, vertices) is stored in Scores for historical rendering.
+
+### Session Template Setup
+
+- Admin selects a template and configures center, radius, and zoom; backend materializes concrete vertices for all shapes to the session so clients can render without re-fetching the catalog.
+- The isTemplateSet flag locks the chosen template for the round; admin may toggle/reset prior to start.
+
