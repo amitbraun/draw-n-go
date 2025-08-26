@@ -1,0 +1,307 @@
+# Draw & Go
+
+## Purpose
+
+Draw & Go is a mobile app that gamifies physical activity by transforming real-world movement into collaborative digital art. A "Painter" defines a target pattern or shape, and "Runners" physically move — jogging or walking — to replicate the shape using GPS tracking. The app encourages creativity, teamwork, and physical exercise, blending fitness with location-based interaction.
+
+## Target Users
+
+- Casual joggers and walkers seeking motivation
+- Friends, couples, or families looking for a fun outdoor challenge
+- Fitness enthusiasts who enjoy goal-oriented tracking
+- Schools or community groups running collaborative health initiatives
+- Urban gamers interested in location-based social play
+
+## Platform
+
+Web using React Native. Azure is used for backend services including:
+
+- Azure Table Storage for user data and authentication
+- Azure Function Apps for serverless backend logic
+
+## Core Building Blocks
+
+### Templates
+
+Predefined shapes or paths (e.g., circle, star, square) that players are challenged to replicate on the map. Templates determine the goal shape for each game. Templates have a difficulty multiplier for later score calculation.
+
+### Session
+
+A persistent game container acting like a "waiting room." Users can join a session and chat or wait. One user (the admin) starts games within the session. The session holds a shared coordinate (latitude and longitude), which is used to anchor all drawings on the map. This coordinate can be set or updated by the admin either before the first game or between games while users are in the waiting room. When a game ends, users return to the session and may start a new round.
+
+### Game
+
+A single round of drawing. The game includes:
+
+- A selected template
+- A set of players
+- One player designated as Painter (who sees the template and all runners' trails)
+- Multiple Runners (who follow blindly the Painter's instructions)
+- A shared coordinate that anchors the drawing on the map, set by the admin
+
+The Painter decides when the game ends based on the quality and speed of the drawing. The goal is to draw the selected template as accurately and quickly as possible using live GPS trails.
+
+### Drawing
+
+The final product of a game, containing:
+
+- The chosen template
+- The trails of all Runners
+- Total duration of the game
+- Score
+
+## Data Model: Azure Tables
+
+This project uses Azure Table Storage. Each table row has PartitionKey and RowKey. Below are the actual tables and fields used in code.
+
+### Templates
+
+- PartitionKey: "template"
+- RowKey: templateId (string)
+- displayName: string
+- baseVertices: JSON string of [{ x, y }] (normalized shape)
+- isCustom: boolean
+- multiplier: number
+
+### Sessions
+
+- PartitionKey: "session"
+- RowKey: sessionId (string)
+- creator: string (admin username)
+- users: JSON string array of usernames
+- readyStatus: JSON string object { username: boolean }
+- isStarted: boolean
+- currentGameId: string | null
+- isTemplateSet: boolean
+- templateId: string
+- templateCenter: JSON string of { latitude, longitude } (or { lat, lng })
+- templateRadiusMeters: number
+- templateZoom: number (optional)
+- templateVertices: JSON string array of { lat, lng } (materialized vertices)
+- roles: JSON string object { username: "Painter" | "Brush" }
+- painter: string (username)
+- defaultCenter: JSON string of { latitude, longitude } (optional)
+
+### Games
+
+- PartitionKey: "game"
+- RowKey: gameId (string)
+- sessionId: string
+- players: JSON string array of usernames
+- roles: JSON string object { username: role }
+- timeStarted: ISO 8601 string
+- status: "in progress" | "completed"
+- timeCompleted: ISO 8601 string (on end)
+- results: JSON string (optional)
+- teamAccuracy: number (optional)
+- teamF1: number (optional)
+- shape: string (placeholder)
+
+### Scores
+
+Used for high-scores and player history; one row per completed game.
+
+- PartitionKey: "score"
+- RowKey: gameId (string)
+- gameId: string
+- sessionId: string
+- timeCompleted: ISO 8601 string
+- timePlayedSec: number (optional)
+- templateId: string
+- templateCenter: JSON string of { latitude, longitude }
+- templateRadiusMeters: number
+- templateZoom: number (optional)
+- templateVertices: JSON string array of { lat, lng }
+- finalScore: number (optional)
+- totalAccuracy: number (optional)
+- players: JSON string array of { username, role, accuracy? }
+- hasDrawing: boolean (optional)
+- drawing: JSON string { trails: { username: [ { latitude, longitude } ] } } (optional, compact)
+- templateName: string (optional)
+
+### Distances
+
+Stores the latest location and cumulative distance per user per game.
+
+- PartitionKey: gameId (string)
+- RowKey: username (string)
+- location: JSON string { latitude, longitude, timestamp }
+- totalDistance: number (meters)
+- seq: number (monotonic counter)
+- lastUpdated: ISO 8601 string
+
+### Users
+
+- PartitionKey: "user"
+- RowKey: username (string)
+- Password: string (SHA-256 hex)
+
+![Output image](media/image1.png)
+
+## Flows & Processes
+
+### User Onboarding (complete)
+
+Handles authentication, permission granting, and initial navigation.
+
+### Session Lifecycle
+
+- Creating a session
+- Setting/changing the shared coordinate
+- Inviting users
+- Managing lobby status
+
+### Game Lifecycle
+
+- Starting a game
+- Assigning roles
+- Rendering the template and tracking movement
+- Ending a game and transitioning back to session
+
+### Real-Time Tracking
+
+- Receiving and storing GPS coordinates (Distances table holds the latest point and cumulative distance per user per game)
+- Painter/clients poll getLocations to display current positions
+- Managing disconnects or location errors
+
+### Scoring Logic & High Scores
+
+- Accuracy of trails compared to the template
+- Time taken
+- Difficulty of the template
+- Composite scoring method
+
+### Template Management
+
+- Creating new template
+- Editing existing ones
+- Session specific templates
+
+## User Onboarding
+
+Authenticate or sign up the user, ensure necessary permissions are granted, initialize their profile, and route them to the appropriate first screen.
+
+1. **App Launch**
+  - Display splash screen.
+  - Load configuration and check local authentication token.
+  - On the entrance screen the current weather forecast, provided by OpenWeather API, is displayed based on the user location.
+
+2. **Sign Up / Login**
+  - If no token:
+    - Present the option to log in or sign up.
+    - For sign-up: collect email, password, display name; validate that both email and display name are unique among active users; hash and store credentials in Azure Table Storage.
+    - For login: collect email and password; validate against Azure records.
+  - If token is valid: auto-login.
+
+3. **Permissions**
+  - Request location access (foreground and background).
+  - Request notification permissions (for invites, game start, or drawing completion).
+
+4. **Profile Initialization**
+  - Fetch or create a user profile.
+  - Set default values if new users (e.g., avatar color, nickname, preferences).
+
+5. **Navigation & Session Routing**
+  - If the user is in an active session: redirect to session lobby.
+  - If no session: direct to "Create or Join Session" screen.
+
+**Edge Cases:**
+
+- Failed sign-up/login (e.g., email in use, wrong password): show error message and retry prompt.
+
+## Game Lifecycle
+
+### Starting a Game
+
+After logging in, a user can create or join a session. The creator becomes the Admin. To join an existing session, the user can enter the session auto-generated UUID, or the name of the admin of the desired session.
+
+**Admin view in waiting room:**
+
+- A map centered on the admin's current location is displayed, always fixed north-up.
+- In the top-right corner, a dropdown lists available templates from the Templates table.
+  - A player can choose to create a new template from scratch. This template won't be saved after the session ends.
+- When a template is selected:
+  - The shape appears on the map as semi-transparent lines.
+  - The admin can pinch to change the radius (scale) and drag the shape to set its center coordinate.
+  - Rotation and tilt are disabled; the template always remains aligned north-up.
+- The admin's goal is to set the middle point and radius so the shape is correctly placed and scaled for the game.
+- Once confirmed, the chosen template, center, and radius are stored and locked for the round.
+- All other players' maps update to display the same shape, middle point, and radius in the same fixed orientation.
+- The game can only start once all players are Ready, and the shape on the map is Set.
+  - The player usernames and current status are shown in the waiting room.
+
+**Non-admin players in waiting room:**
+
+- See the map with the template, center, and radius as set by the admin.
+- Cannot move or resize the template.
+
+### Assigning Roles
+
+- One player is designated as Painter (Brush).
+  - This can be done at random, or by choosing a specific player. The mechanism is set by the session admin.
+- All other active participants are Runners.
+- Roles are recorded in the Players table with unique colors assigned to each participant.
+
+**Painter (Brush) view:**
+
+- Sees the template overlay in the fixed position and scale.
+- Sees the full trails of all Runners, built from their polled location points (rendered as colored polylines).
+- A marker indicating each Runner's latest point.
+- The time passed since the game started.
+
+**Runner view:**
+
+- See only the time passed since the game started.
+
+### Rendering the Template and Tracking Movement
+
+- All maps are fixed north-up; rotation and tilt are disabled.
+- At game start, GPS tracking begins for all participants.
+  - Runners send location updates to the server at a regular polling interval and/or after a minimum movement distance.
+  - The server stores each point in LocationPoints and aggregates them per Runner to form a trail.
+  - The Painter (Brush) polls the server to retrieve the latest cumulative trail data for each Runner and renders it as colored polylines.
+
+### Game end
+
+- When the Painter decides, they press "End Game".
+- Each player will see the score breakdown of the game on their screen, and then will be moved back to the session waiting room screen.
+
+### Session end
+
+- When the Admin decides, they press "End Session" — this terminates the session for all players and returns them to the Create Session screen.
+
+## Real-Time Tracking
+
+During the game, the system tracks and displays the trails of the players.
+
+- Receiving and storing GPS coordinates
+- Broadcasting location updates to players
+- Managing disconnects or location errors
+
+## Scoring Process
+
+The scoring mechanism evaluates the game outcome. The shape referred to here is the combination of the chosen template, its size, and its fixed placement on the map.
+
+1. **Accuracy of trails compared to the shape**
+  - Each user's trail is compared against the shape. Deviations are quantified as errors which reduce the accuracy score.
+2. **Time Taken**
+  - The duration required to complete a trial is recorded from start to finish. Faster completion times are rewarded.
+3. **Difficulty of the Template**
+  - Templates have difficulty multipliers (based on complexity and length). Performance scores are adjusted relative to template difficulty.
+4. **Size of the shape**
+  - Larger shapes are harder and take more time; they are rewarded with more points.
+5. **Composite Scoring Method**
+  - A weighted composite score is calculated by combining the above elements (formula TBD).
+
+Scores are presented at the end of each game and are also accessible through the user portal (via the user icon on the top left, or the high-scores tab). You can filter your high scores by different parameters.
+
+## Template Management
+
+The system supports a structured approach to managing templates, which serve as the foundation for trails and scoring.
+
+1. **Creating New Templates**
+  - An admin can create new templates by setting points on the map that define the shape, difficulty multiplier, and name.
+2. **Editing Existing Templates**
+  - Existing templates can be deleted, or have their difficulty multiplier edited. These actions can be performed only by an admin.
+3. **Session-Specific Templates**
+  - Templates can be created for a single session. These do not have a custom difficulty multiplier and are deleted once the session ends.
