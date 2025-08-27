@@ -16,7 +16,7 @@ Draw & Go is a mobile app that gamifies physical activity by transforming real-w
 
 Web using React Native. Azure is used for backend services including:
 
-- Azure Table Storage for user data and authentication
+- Azure Table Storage for user data and in-game data and statistics
 - Azure Function Apps for serverless backend logic
 
 ## Core Building Blocks
@@ -36,7 +36,7 @@ A single round of drawing. The game includes:
 - A selected template
 - A set of players
 - One player designated as Painter (who sees the template and all runners' trails)
-- Multiple Runners (who follow blindly the Painter's instructions)
+- Multiple Brushes (who follow blindly the Painter's instructions)
 - A shared coordinate that anchors the drawing on the map, set by the admin
 
 The Painter decides when the game ends based on the quality and speed of the drawing. The goal is to draw the selected template as accurately and quickly as possible using live GPS trails.
@@ -138,15 +138,14 @@ Stores the latest location and cumulative distance per user per game.
 
 ## Flows & Processes
 
-### User Onboarding (complete)
+### User Onboarding
 
 Handles authentication, permission granting, and initial navigation.
 
 ### Session Lifecycle
 
 - Creating a session
-- Setting/changing the shared coordinate
-- Inviting users
+- Setting/changing the target template
 - Managing lobby status
 
 ### Game Lifecycle
@@ -174,7 +173,7 @@ Handles authentication, permission granting, and initial navigation.
 
 - Creating new template
 - Editing existing ones
-- Session specific templates
+- Session specific templates ("Polygon")
 
 ## User Onboarding
 
