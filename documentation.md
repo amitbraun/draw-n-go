@@ -318,3 +318,79 @@ The system supports a structured approach to managing templates, which serve as 
 - Admin selects a template and configures center, radius, and zoom; backend materializes concrete vertices for all shapes to the session so clients can render without re-fetching the catalog.
 - The isTemplateSet flag locks the chosen template for the round; admin may toggle/reset prior to start.
 
+## Functions
+
+### CreateSession (POST)
+- Creates a new row in Sessions with a fresh UUID sessionId.
+- Persists: creator username, users array initialized with creator, readyStatus map (creator: false), isStarted=false, currentGameId=null.
+- Returns the new sessionId.
+
+### JoinSession (GET/POST)
+- GET: Returns a session snapshot: users, readyStatus, roles, painter, template (if set), defaultCenter, and state flags.
+- POST operations (require x-username header):
+  - Join: adds user to users list and initializes readyStatus[user]=false.
+  - Ready toggle: sets readyStatus[user] to true/false.
+  - Leave: removes user; deletes session if admin leaves or last user leaves.
+  - setDefaultCenter (admin only): stores a default map center.
+  - setTemplate (admin only): stores templateId, center, radius, zoom and materializes concrete vertices into session:
+    - For polygon: accepts client-provided vertices.
+    - For catalog shapes: fetches baseVertices (normalized x,y) and scales to lat/lng using dLat=radius/111320 and dLng=radius/(111320*cos(lat)).
+    - If polygon center missing but vertices exist, computes centroid as fallback.
+  - templateSet toggle (admin only): updates isTemplateSet flag.
+
+### StartGame (POST)
+- Start: validates session is not started, picks painter (requested or random), sets roles map (Painter/Brush), creates a Games entity (status "in progress"), and updates the Session (isStarted, currentGameId, roles, painter).
+- End (endGame=true):
+  - Loads current game, attaches optional results payload, and stamps completion time.
+  - Builds a Scores row (one per game) with timePlayedSec (from timeStarted to timeCompleted), template snapshot (center, radius, zoom, vertices), finalScore and totalAccuracy from results.team if provided.
+  - Players summary: merges roles with per-user adjustedPct (Brushes only) into a players array.
+  - Resets session state (isStarted=false, clears currentGameId/roles/painter).
+
+### sendLocation (POST)
+- Upserts the latest location per (gameId, username) in the Distances table with cumulative totalDistance.
+- Uses haversine to compute segment delta between previous and current point; ignores jitter below 0.5m.
+- Maintains a monotonically increasing seq and lastUpdated timestamp for ordering/debugging.
+
+### getLocations (GET)
+- Queries Distances by PartitionKey=gameId and returns an array [{ username, latitude, longitude, timestamp, totalDistance }].
+- Parses numeric fields defensively; returns an empty list on errors.
+
+### GetTemplates (GET)
+- Returns the templates catalog (PartitionKey=='template').
+- Passes through baseVertices (normalized x,y) if stored as JSON string or array.
+- Supplies a multiplier per template: uses stored value if valid; otherwise sensible defaults by shape (star 1.6, square 1.3, triangle 1.15, circle 1.05, polygon 1.0).
+
+### CreateTemplate (POST)
+- Validates templateId with a conservative regex and baseVertices shape (array of {x,y} with length ≥3).
+- Accepts multiplier (supports comma or dot decimals); falls back to 1.0 when absent/invalid.
+- Stores displayName (capitalized id), baseVertices as JSON, isCustom=true, and multiplier.
+
+### UpdateTemplate (POST)
+- Updates multiplier (validated float) and/or displayName for an existing template.
+- Merges changes into the Templates row.
+
+### DeleteTemplate (DELETE)
+- Deletes a template only if it is custom (isCustom=true).
+- Protects core templates (circle, square, star, triangle) from deletion.
+
+### GetHighScores (GET)
+- Lists scores (PartitionKey=='score') with optional templateId filter.
+- Expands players JSON and template names.
+- Sorts strictly by finalScore descending (missing scores sort last) and paginates (page/pageSize bounds enforced).
+
+### GetPlayerGames (GET)
+- Returns paged game history for a username by scanning Scores rows and selecting entries where players[] contains that username.
+- Includes role and individual accuracy (for Brushes) and normalized date strings.
+- Sorts by timeCompleted descending.
+
+### login (POST)
+- Authenticates against Users table by hashing the provided password with SHA‑256 and comparing to stored Password hash.
+- Returns 200 on success, 401 for wrong password, 404 if user not found.
+
+### signUp (POST)
+- Creates a new Users row with SHA‑256 hashed password if username doesn’t already exist.
+- Returns 201 on success; 409 if username is taken.
+
+### negotiate (GET/POST) - DEPRECATED
+- Placeholder endpoint for SignalR negotiate; currently returns 404 with CORS headers (SignalR not in use).
+
