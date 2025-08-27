@@ -390,7 +390,3 @@ The system supports a structured approach to managing templates, which serve as 
 ### signUp (POST)
 - Creates a new Users row with SHA‑256 hashed password if username doesn’t already exist.
 - Returns 201 on success; 409 if username is taken.
-
-### negotiate (GET/POST) - DEPRECATED
-- Placeholder endpoint for SignalR negotiate; currently returns 404 with CORS headers (SignalR not in use).
-
