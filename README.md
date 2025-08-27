@@ -88,4 +88,4 @@ Built with 💙 by Amit Braun
 
 Licensed under the MIT License.
 
-For further documentation, please read the [documentation.md in the repo]([url](https://github.com/amitbraun/draw-n-go/blob/main/documentation.md)) :) 
+For further documentation, please read the documentation.md in the repo - https://github.com/amitbraun/draw-n-go/blob/main/documentation.md
